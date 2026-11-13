@@ -19,7 +19,7 @@ MockClient _recorder(List<Map<String, String>> log,
 /// MockClient that answers with a scripted sequence of (status, body)
 /// responses, also recording every request.
 MockClient _script(List<(int, String)> responses, List<Map<String, String>> log) =>
-    MockClient((req) {
+    MockClient((req) async {
       log.add(
           {'method': req.method, 'url': req.url.toString(), 'body': req.body});
       final r = responses.removeAt(0);
