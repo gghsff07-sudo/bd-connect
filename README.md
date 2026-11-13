@@ -7,12 +7,14 @@ widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
 **Latest release: v2.4.0 (versionCode 6)** — install
-[`releases/db-monitor-v2.4.apk`](releases/db-monitor-v2.4.apk) (Android 5.0+),
-or download from the [Releases](../../releases) page.
+`db-monitor-v2.4.0.apk` from the [v2.4.0 release](../../releases/tag/v2.4.0)
+(Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
-1. Copy `releases/db-monitor-v2.4.apk` to your Android phone (Android 5.0+).
+1. Download `db-monitor-v2.4.0.apk` from the
+   [v2.4.0 release](../../releases/tag/v2.4.0) and copy it to your Android
+   phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
    v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 6).
 3. On first launch the app asks for **notification permission** — allow it so
@@ -72,7 +74,7 @@ or download from the [Releases](../../releases) page.
 
 ## Building from source
 
-Requirements: Flutter 3.24.x, Dart 3.4+, Android SDK 34, JDK 17.
+Requirements: Flutter 3.47.x (built and tested with 3.47.9), Dart 3.4+, Android SDK 34, JDK 17.
 
 ```bash
 cd app
@@ -139,7 +141,7 @@ device, sync waits until you configure one.
 
 ## Technical
 
-- Flutter 3.24.5, Dart 3.4+, minSdk 21, targetSdk 34, package
+- Flutter 3.47, Dart 3.4+, minSdk 21, targetSdk 34, package
   `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
