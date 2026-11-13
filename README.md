@@ -84,6 +84,11 @@ The APK appears at `app/build/app/outputs/flutter-apk/app-release.apk`.
 For a signed build matching the released APK, see
 [`signing/SIGNING.md`](signing/SIGNING.md).
 
+**CI:** publishing a GitHub release (tag `v*`) automatically builds the
+signed APK and attaches it (plus a SHA-256 checksum) to that release —
+see [`.github/workflows/release-build.yml`](.github/workflows/release-build.yml).
+The workflow can also be run manually from the **Actions** tab.
+
 To reproduce the full project as originally delivered (sources + keystore +
 build config), unzip `releases/db-monitor-v2.3-project.zip`, or apply
 `releases/db-monitor-v2.3.patch` to an empty git repo:

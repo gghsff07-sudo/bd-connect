@@ -1,0 +1,89 @@
+name: Release Build
+
+# Builds the signed release APK whenever a GitHub release is published,
+# attaches the APK + SHA-256 checksum to that release. Also runnable
+# manually (workflow_dispatch) for a test build without publishing.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to attach assets to the release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.24.5"
+          cache: true
+
+      - name: Show toolchain
+        run: |
+          flutter --version
+          java -version
+
+      # The release keystore and key.properties live in signing/ (see
+      # signing/SIGNING.md); gradle expects them inside app/android/.
+      - name: Stage signing files
+        run: |
+          cp signing/dbmonitor.keystore app/android/app/dbmonitor.keystore
+          cp signing/key.properties    app/android/key.properties
+
+      - name: Install dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Run unit tests
+        working-directory: app
+        run: flutter test
+
+      - name: Build release APK
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: Collect artifact + checksum
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="v$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/android/app/build.gradle)"
+          fi
+          mkdir -p dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk "dist/db-monitor-${TAG}.apk"
+          cd dist && sha256sum "db-monitor-${TAG}.apk" > "db-monitor-${TAG}.apk.sha256"
+          echo "### APK checksum" > checksum.txt
+          echo '```' >> checksum.txt
+          cat "db-monitor-${TAG}.apk.sha256" >> checksum.txt
+          echo '```' >> checksum.txt
+          ls -la
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-monitor-apk
+          path: dist/*
+
+      - name: Attach APK to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/db-monitor-*.apk
+            dist/db-monitor-*.apk.sha256
+          body_path: dist/checksum.txt
+          append_body: true
