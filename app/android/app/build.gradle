@@ -12,12 +12,16 @@ if (keyPropertiesFile.exists()) {
 
 android {
     namespace = "com.dbmonitor.db_monitor"
-    compileSdk = 34
+    // compileSdk 36 (Androidx.Work 2.11 pulled by workmanager 0.10 needs 35+;
+    // 36 is also Flutter 3.47's default). targetSdk stays 34.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications uses java.time APIs on minSdk 24
+        coreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -47,6 +51,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 }
 
 flutter {
