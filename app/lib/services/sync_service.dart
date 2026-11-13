@@ -139,7 +139,7 @@ Future<void> registerPeriodicPoll() async {
       'dbMonitorSync',
       frequency: kPollInterval, // 15 min = Android's minimum periodic interval
       constraints: Constraints(networkType: NetworkType.connected),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       backoffPolicy: BackoffPolicy.exponential,
     );
   } catch (_) {

@@ -8,13 +8,13 @@ widget, and styled notifications with a full permission flow — all in the warm
 
 **Latest release: v2.4.0 (versionCode 6)** — install
 `db-monitor-v2.4.0.apk` from the [v2.4.0 release](../../releases/tag/v2.4.0)
-(Android 5.0+). The APK is built and attached automatically by GitHub Actions.
+(Android 7.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
 1. Download `db-monitor-v2.4.0.apk` from the
    [v2.4.0 release](../../releases/tag/v2.4.0) and copy it to your Android
-   phone (Android 5.0+).
+   phone (Android 7.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
    v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 6).
 3. On first launch the app asks for **notification permission** — allow it so
@@ -141,7 +141,7 @@ device, sync waits until you configure one.
 
 ## Technical
 
-- Flutter 3.47, Dart 3.4+, minSdk 21, targetSdk 34, package
+- Flutter 3.47, Dart 3.4+, minSdk 24 (Android 7.0+), targetSdk 34, package
   `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
