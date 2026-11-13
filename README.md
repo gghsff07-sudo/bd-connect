@@ -6,22 +6,47 @@ WhatsApp-style cloud sync, Markdown message bodies, a real-time home-screen
 widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
-**Latest release: v2.4.0 (versionCode 6)** — install
-`db-monitor-v2.4.0.apk` from the [v2.4.0 release](../../releases/tag/v2.4.0)
+**Latest release: v2.5.0 (versionCode 7)** — install
+`db-monitor-v2.5.0.apk` from the [v2.5.0 release](../../releases/tag/v2.5.0)
 (Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
-1. Download `db-monitor-v2.4.0.apk` from the
-   [v2.4.0 release](../../releases/tag/v2.4.0) and copy it to your Android
+1. Download `db-monitor-v2.5.0.apk` from the
+   [v2.5.0 release](../../releases/tag/v2.5.0) and copy it to your Android
    phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
-   v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 6).
+   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 7).
 3. On first launch the app asks for **notification permission** — allow it so
    database alerts can reach you (Android 13+).
 4. From v2.4 onward you never need to sideload again: **Settings → App
    updates → Check** looks up the latest GitHub release, downloads the APK
    and the system installer finishes the job.
+
+## What's new in v2.5
+
+- **TECMIS deletion endpoints are now used by the app** — deleting a TECMIS
+  notice in the chat (long-press → Delete everywhere) calls the backend's
+  dedicated `DELETE /api/tecmis-delete?id=…` (with a fallback to
+  `DELETE /api/items/<id>`). Requires the
+  [db-monitor-api](https://github.com/dev-sandakelum/db-monitor-api) with the
+  TECMIS endpoints deployed.
+- **Daily cloud cleanup (`tecmis-delete-old`)** — once a day, after a
+  successful pull, the app sends the ids it still holds to
+  `DELETE /api/tecmis-delete-old`, removing cloud copies of notices whose
+  deletes previously failed. Safety rules: it never runs when the local list
+  is empty or unreadable, so a fresh install or a cleared database can never
+  wipe the cloud.
+- **Authenticated writes** — the configured URL's query string (e.g.
+  `?key=<API_TOKEN>`) is now kept on every PUT/DELETE request. Previously
+  push and delete went out without it (and delete additionally hit a wrong
+  URL), so on the db-monitor-api they always failed with 401.
+- **Ids with spaces work** — item ids are percent-encoded in request URLs,
+  so records like `tecmis-file-…-ICT - Exam Timetable.pdf` can now be pushed
+  and deleted.
+- **Install fix** — the APK is built again with the exact v2.3 toolchain
+  (Flutter 3.24.5, AGP 8.1, minSdk 21, v1+v2 signatures), fixing the
+  "package invalid" rejection on Android 5/6 devices.
 
 ## What's new in v2.4
 
@@ -95,7 +120,7 @@ The workflow can also be run manually from the **Actions** tab.
 ## Repository layout
 
 ```
-app/        Flutter project (v2.4.0) — lib/, android/, assets/, test/
+app/        Flutter project (v2.5.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
 ```
@@ -117,6 +142,13 @@ Open **Settings → Cloud sync** in the app and enter either:
    `type`/`severity`, `createdAt`/`timestamp`…; envelopes `items`/`data`/
    `results`/`rows`/`records` are unwrapped).
 
+   With the [db-monitor-api](https://github.com/dev-sandakelum/db-monitor-api)
+   backend, put the API key straight into the URL:
+   `https://<project>.vercel.app/api/items?key=<API_TOKEN>`. The key is kept
+   on every request (pull / push / delete), and TECMIS notices additionally
+   use the backend's `tecmis-delete` / `tecmis-delete-old` endpoints
+   (see “What's new in v2.5”).
+
 Without a cloud the app runs in **local mode** — everything stored on the
 device, sync waits until you configure one.
 
@@ -134,7 +166,7 @@ device, sync waits until you configure one.
 ## Technical
 
 - Flutter 3.24.5, Dart 3.5, minSdk 21 (Android 5.0+), targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6, signed with
+  `com.dbmonitor.db_monitor`, versionName 2.5.0, versionCode 7, signed with
   v1+v2 schemes (minSdk 21 keeps v1 so older devices accept the APK)
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
@@ -152,7 +184,8 @@ device, sync waits until you configure one.
 
 | Version | Notes |
 | --- | --- |
-| v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail (current) |
+| v2.5.0 | TECMIS deletion endpoints, authenticated writes, percent-encoded ids, install fix (v2.3 toolchain) (current) |
+| v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail |
 | v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
 | v2.2 | Sync hardening, storage screen |
 | v2.1 / v2.0 | Widget + sync iterations |

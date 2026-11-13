@@ -56,6 +56,11 @@ class SyncService {
       await _drainOutbox();
       final pulled = await _pullAndMerge();
       lastError = pulled;
+      if (pulled.isEmpty) {
+        // Only sweep after a good pull: a failed pull means the local id
+        // list may be stale, and a stale list must never drive deletions.
+        await _maybeReconcileTecmis();
+      }
       await _store.setLastSync(DateTime.now());
       await _store.setLastPoll(DateTime.now());
       DataBus().notify();
@@ -126,6 +131,47 @@ class SyncService {
       }
     }
     return '';
+  }
+
+  /// How often the TECMIS reconcile sweep may run (per device).
+  static const Duration _tecmisReconcileInterval = Duration(hours: 24);
+
+  /// Best-effort cloud cleanup using the db-monitor-api's
+  /// tecmis-delete-old endpoint: deletes every TECMIS notice in the cloud
+  /// that this device no longer holds. This heals outbox deletes that
+  /// gave up after 8 failed attempts - by then the local copy is already
+  /// gone and tombstoned, so the per-item retry cannot fire anymore.
+  ///
+  /// Safety rules - a broken or empty local list must never wipe the cloud:
+  ///  - runs at most once every 24 hours (meta key `tecmis_reconcile_at`);
+  ///  - only called from [syncOnce] AFTER a successful pull;
+  ///  - skipped entirely when the local TECMIS list is empty or unreadable,
+  ///    so a fresh install or a cleared database deletes nothing.
+  Future<void> _maybeReconcileTecmis() async {
+    try {
+      final last = await _store.getMeta('tecmis_reconcile_at');
+      final lastMs = int.tryParse(last ?? '') ?? 0;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - lastMs < _tecmisReconcileInterval.inMilliseconds) return;
+      final rows = await _store.tecmisRows();
+      if (rows == null) return; // DB unreadable -> unknown state, do nothing
+      final ids = rows
+          .map((r) => r['id']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (ids.isEmpty) return; // an empty list would delete EVERYTHING: never
+      final (deleted, err) = await _cloud.reconcileTecmis(ids);
+      if (err != null) {
+        if (kDebugMode) print('tecmis reconcile: $err');
+        return; // do not stamp the clock: retry next cycle
+      }
+      await _store.setMeta('tecmis_reconcile_at', nowMs.toString());
+      if (kDebugMode && deleted > 0) {
+        print('tecmis reconcile: removed $deleted orphaned notice(s)');
+      }
+    } catch (_) {
+      // Never let housekeeping break a sync cycle.
+    }
   }
 }
 

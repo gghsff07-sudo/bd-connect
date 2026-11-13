@@ -1,7 +1,7 @@
 name: db_monitor
-description: DB Monitor v2.4 - real-time widget with adjustable ring, in-app GitHub updates, WhatsApp-style local storage with cloud sync, Soft Day theme.
+description: DB Monitor v2.5 - real-time widget with adjustable ring, in-app GitHub updates, WhatsApp-style local storage with cloud sync (incl. TECMIS deletion endpoints), Soft Day theme.
 publish_to: "none"
-version: 2.4.0+6
+version: 2.5.0+7
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

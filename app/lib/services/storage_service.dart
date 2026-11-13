@@ -203,6 +203,21 @@ class StorageService {
     await enqueue(withState, op: 'upsert');
   }
 
+  /// All locally stored TECMIS notices (id + source columns only), used by
+  /// the sync engine to reconcile cloud deletions. Returns null when the
+  /// database cannot be read - callers must treat null as "unknown", never
+  /// as "no notices", so a broken DB never wipes the cloud.
+  Future<List<Map<String, Object?>>?> tecmisRows() async {
+    try {
+      final d = await db;
+      return await d.query('messages',
+          columns: const ['id', 'source'],
+          where: "substr(id, 1, 7) = 'tecmis-'");
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---------------- outbox (send queue) ----------------
 
   Future<void> enqueue(MonitorItem item, {String op = 'upsert'}) async {
