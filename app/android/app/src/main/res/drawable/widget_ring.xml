@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terracotta progress ring: cream track behind, terracotta sweep in front.
+     Layer 1 (background) is the track; ProgressBar draws the rotating sweep.
+     useLevel=true + rotate(270..630) starts the fill at 12 o'clock. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="ring"
+            android:innerRadiusRatio="2.6"
+            android:thicknessRatio="10"
+            android:useLevel="false">
+            <solid android:color="@color/widget_track"/>
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <rotate
+            android:fromDegrees="270"
+            android:toDegrees="630">
+            <shape android:shape="ring"
+                android:innerRadiusRatio="2.6"
+                android:thicknessRatio="10"
+                android:useLevel="true">
+                <solid android:color="@color/widget_accent"/>
+            </shape>
+        </rotate>
+    </item>
+</layer-list>

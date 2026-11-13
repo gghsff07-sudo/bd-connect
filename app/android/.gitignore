@@ -1,0 +1,6 @@
+gradle-wrapper.jar
+.gradle/
+build/
+local.properties
+key.properties
+*.keystore

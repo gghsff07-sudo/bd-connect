@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Soft Day widget palette -->
+    <color name="widget_card">#F8F4EE</color>
+    <color name="widget_accent">#C0684F</color>
+    <color name="widget_heading">#2E2A26</color>
+    <color name="widget_muted">#8A8078</color>
+    <color name="widget_track">#D8D0C6</color>
+</resources>

@@ -1,0 +1,28 @@
+Notice Tracker — release signing credentials
+=============================================
+
+Keep this folder private. Anyone with this keystore and these passwords can
+sign updates that install over your installed copy of the app.
+
+Keystore file : notice-tracker-release.keystore
+Keystore type : PKCS12
+Alias         : notice-tracker
+Store password: 572729a211c53268c84cbafe
+Key password  : 572729a211c53268c84cbafe
+Validity      : 30 years (10950 days), RSA 2048
+
+Certificate fingerprints (register in Firebase console -> Android app ->
+add fingerprint, alongside your debug SHA-1):
+  SHA-1   : 36be59df0249de4c4f41c2a9f74fa42e7b67dff9
+  SHA-256 : 2d3e56e0ae15660525a13722c44d09a6687ed1fa7f2d570c652e7c5e4d000818
+
+How to use for a rebuild
+------------------------
+1. Copy notice-tracker-release.keystore to android/app/ after running
+   npx expo prebuild --platform android
+2. Append the NOTICE_TRACKER_RELEASE_* properties to android/gradle.properties
+   (see README.md, "Release signing").
+3. ./gradlew assembleRelease
+
+Verify a signature yourself:
+  keytool -printcert -jarfile NoticeTracker-v1.0.0-android-release.apk

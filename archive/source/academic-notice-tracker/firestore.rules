@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Academic Notice Tracker - Firestore security rules.
+//
+// Replace OWNER_EMAIL with the owner's Google account email (the same
+// value as EXPO_PUBLIC_OWNER_EMAIL in the app's .env), then deploy:
+//   firebase deploy --only firestore:rules
+//
+// The app only ever reads notices/sources and writes its own state,
+// settings and device tokens. The backend (pollers) uses the Admin SDK,
+// which bypasses these rules.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function owner() {
+      return request.auth != null && request.auth.token.email == 'OWNER_EMAIL';
+    }
+
+    match /notices/{id} {
+      allow read: if owner();
+      allow write: if false;
+    }
+
+    match /sources/{id} {
+      allow read: if owner();
+      allow write: if false;
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if owner() && request.auth.uid == uid;
+    }
+  }
+}

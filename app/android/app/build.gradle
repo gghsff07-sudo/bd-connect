@@ -1,0 +1,63 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def keyProperties = new Properties()
+def keyPropertiesFile = rootProject.file("key.properties")
+if (keyPropertiesFile.exists()) {
+    keyProperties.load(new FileInputStream(keyPropertiesFile))
+}
+
+android {
+    namespace = "com.dbmonitor.db_monitor"
+    compileSdk = 34
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        applicationId = "com.dbmonitor.db_monitor"
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 5
+        versionName = "2.3.0"
+    }
+
+    signingConfigs {
+        release {
+            if (keyPropertiesFile.exists()) {
+                keyAlias = keyProperties['keyAlias']
+                keyPassword = keyProperties['keyPassword']
+                storeFile = keyProperties['storeFile'] ? file(keyProperties['storeFile']) : null
+                storePassword = keyProperties['storePassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = keyPropertiesFile.exists() ? signingConfigs.release : null
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+configurations.all {
+    // workmanager pulls work-runtime-ktx 2.7.1 while other plugins pull
+    // work-runtime 2.8.1 - unify on 2.8.1 to avoid duplicate classes.
+    resolutionStrategy {
+        force 'androidx.work:work-runtime:2.8.1'
+        force 'androidx.work:work-runtime-ktx:2.8.1'
+    }
+}
+
+flutter {
+    source = "../.."
+}

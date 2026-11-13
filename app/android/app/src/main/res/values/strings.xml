@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Real-time countdown to the next 15-minute database sync, last update time, pending count and the latest message.</string>
+</resources>

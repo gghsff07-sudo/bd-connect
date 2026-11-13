@@ -1,0 +1,21 @@
+# Build artifacts (never commit)
+build/
+.dart_tool/
+.gradle/
+.cxx/
+
+# Machine-local config (flutter/gradle regenerate these)
+app/android/local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+*.log
+
+# NOTE: signing files (*.keystore, key.properties) ARE intentionally committed
+# in signing/ (and app/android/) so the project builds a signed release
+# out-of-the-box. See signing/SIGNING.md before making this repo public.
