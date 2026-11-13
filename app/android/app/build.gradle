@@ -24,6 +24,12 @@ android {
         coreLibraryDesugaringEnabled = true
     }
 
+    // AGP 8 no longer generates BuildConfig by default; MainActivity reads
+    // BuildConfig.VERSION_NAME for the in-app updater.
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.dbmonitor.db_monitor"
         minSdkVersion = flutter.minSdkVersion
