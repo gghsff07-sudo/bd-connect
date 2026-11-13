@@ -6,17 +6,37 @@ WhatsApp-style cloud sync, Markdown message bodies, a real-time home-screen
 widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
-**Latest release: v2.3.0 (versionCode 5)** — install
-[`releases/db-monitor-v2.3.apk`](releases/db-monitor-v2.3.apk) (Android 5.0+),
+**Latest release: v2.4.0 (versionCode 6)** — install
+[`releases/db-monitor-v2.4.apk`](releases/db-monitor-v2.4.apk) (Android 5.0+),
 or download from the [Releases](../../releases) page.
 
 ## Install
 
-1. Copy `releases/db-monitor-v2.3.apk` to your Android phone (Android 5.0+).
+1. Copy `releases/db-monitor-v2.4.apk` to your Android phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
-   v2.2/v2.1 works directly (same signature, higher versionCode 5).
+   v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 6).
 3. On first launch the app asks for **notification permission** — allow it so
    database alerts can reach you (Android 13+).
+4. From v2.4 onward you never need to sideload again: **Settings → App
+   updates → Check** looks up the latest GitHub release, downloads the APK
+   and the system installer finishes the job.
+
+## What's new in v2.4
+
+- **Compact side countdown on the widget** — the countdown ring now sits on
+  the right side of the widget in a smaller size, so the message lines get
+  the full width. Three sizes (S 40dp / M 48dp / L 58dp) adjustable in
+  **Settings → Home-screen widget → Countdown ring size**; the widget
+  re-renders within a second after changing.
+- **In-app updates from GitHub releases** — the app checks
+  `github.com/gghsff07-sudo/bd-connect/releases` for a newer version, shows
+  the release notes, downloads the APK with a progress bar and launches the
+  system installer (Android 8+ via session-based install intent, older
+  devices via the classic VIEW intent). Android 8+ asks once for "install
+  unknown apps" permission for DB Monitor.
+- **Full-width message detail** — the message popup no longer hugs the right
+  edge like a chat bubble: it opens as a full-width card, giving Markdown
+  bodies (tables, code blocks, videos) the whole screen width.
 
 ## What's new in v2.3
 
@@ -77,10 +97,10 @@ git add -A && git commit -m "DB Monitor v2.3.0"
 ## Repository layout
 
 ```
-app/        Flutter project (v2.3.0) — lib/, android/, assets/, test/
+app/        Flutter project (v2.4.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
-releases/   db-monitor-v2.3.apk, project zip, git patch
+releases/   db-monitor-v2.4.apk, project zip, git patch
 archive/    earlier versions & predecessor apps (DB Alert, Notice Tracker)
 ```
 
@@ -115,13 +135,16 @@ device, sync waits until you configure one.
 ## Technical
 
 - Flutter 3.24.5, Dart 3.4+, minSdk 21, targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.3.0, versionCode 5
+  `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
   timer + resume-triggered sync; exponential backoff via attempt counters
 - Markdown: `flutter_markdown` + custom image builder + `video_player`
 - Widget: `home_widget` + native `SoftDayWidgetProvider` (Kotlin) with a
-  1-second Handler tick for real-time updates
+  1-second Handler tick for real-time updates; three size layouts
+  (S/M/L, selectable in Settings)
+- Updates: GitHub releases API + `http` streaming download + FileProvider
+  install intent (`db_monitor/update` method channel)
 - Notifications: `flutter_local_notifications`, 4 per-type channels,
   Android 13+ runtime permission flow, BigText style, terracotta color
 
@@ -129,7 +152,8 @@ device, sync waits until you configure one.
 
 | Version | Notes |
 | --- | --- |
-| v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync (current) |
+| v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail (current) |
+| v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
 | v2.2 | Sync hardening, storage screen (see `archive/apk/`) |
 | v2.1 / v2.0 | Widget + sync iterations (see `archive/apk/`) |
 | DB Alert v1–v2 | Predecessor app (see `archive/`) |

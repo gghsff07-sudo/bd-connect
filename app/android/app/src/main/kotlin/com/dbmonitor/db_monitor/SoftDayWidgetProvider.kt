@@ -28,13 +28,25 @@ import es.antonborri.home_widget.HomeWidgetPlugin
  */
 class SoftDayWidgetProvider : AppWidgetProvider() {
 
+    /**
+     * Layout for the current widget size setting (s/m/l), pushed by the
+     * Flutter side as "widgetSize". Ring sits on the right side in all
+     * three; sizes and fonts scale up per level.
+     */
+    private fun layoutFor(prefs: android.content.SharedPreferences): Int = when (prefs.getString("widgetSize", "s")) {
+        "m" -> R.layout.soft_day_widget_med
+        "l" -> R.layout.soft_day_widget_big
+        else -> R.layout.soft_day_widget
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        val prefs = HomeWidgetPlugin.getData(context)
         for (id in appWidgetIds) {
-            appWidgetManager.updateAppWidget(id, buildViews(context))
+            appWidgetManager.updateAppWidget(id, buildViews(context, prefs))
         }
         scheduleTick(context)
     }
@@ -72,8 +84,8 @@ class SoftDayWidgetProvider : AppWidgetProvider() {
         tickHandler.postDelayed(tickRunnable, 1000L)
     }
 
-    private fun buildViews(context: Context): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.soft_day_widget)
+    private fun buildViews(context: Context, prefs: android.content.SharedPreferences): RemoteViews {
+        val views = RemoteViews(context.packageName, layoutFor(prefs))
         render(context, views)
         // Tap opens the app (launch intent, MainActivity handles singleTop).
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -149,7 +161,8 @@ class SoftDayWidgetProvider : AppWidgetProvider() {
             tickHandler.removeCallbacksAndMessages(null)
             return
         }
-        val views = RemoteViews(context.packageName, R.layout.soft_day_widget)
+        val prefs = HomeWidgetPlugin.getData(context)
+        val views = RemoteViews(context.packageName, layoutFor(prefs))
         render(context, views)
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         if (intent != null) {

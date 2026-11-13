@@ -23,6 +23,7 @@ class WidgetService {
       final items = await s.loadItems(limit: 1);
       final pending = await s.pendingCount();
       final lastPoll = await s.getLastPoll();
+      final widgetSize = await s.getWidgetSize();
 
       final lastPollLabel = lastPoll == null
           ? 'never'
@@ -45,8 +46,10 @@ class WidgetService {
       await HomeWidget.saveWidgetData('nextCheckMs', nextCheckMs);
       await HomeWidget.saveWidgetData('latestTitle', latestTitle);
       await HomeWidget.saveWidgetData('lastPollLabel', lastPollLabel);
-      await HomeWidget.saveWidgetData(
-          'lastUpdateMs', DateTime.now().millisecondsSinceEpoch);
+      await HomeWidget.saveWidgetData('lastUpdateMs',
+          DateTime.now().millisecondsSinceEpoch);
+      // Layout variant (s/m/l) the native provider picks per render.
+      await HomeWidget.saveWidgetData('widgetSize', widgetSize);
       await HomeWidget.updateWidget(androidName: _widgetName);
     } catch (_) {
       // Widget is optional polish - never let it break the app.

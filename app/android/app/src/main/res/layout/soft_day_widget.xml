@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Soft Day themed real-time home-screen widget.
+  Soft Day themed real-time home-screen widget — SMALL ring layout (default).
   Cream rounded card (#F8F4EE), terracotta ring (#C0684F), charcoal heading
   (#2E2A26), warm gray labels (#8A8078).
-  SoftDayWidgetProvider re-renders this every second: the countdown ticks,
+  Text on the left, compact countdown ring on the right side.
+  SoftDayWidgetProvider re-renders every second: the countdown ticks,
   the progress ring drains, and "updated Ns ago" counts up from lastUpdateMs.
+  Ring size is adjustable in the app (Settings → Home-screen widget):
+    s = this layout (40dp) · m = soft_day_widget_med (48dp) · l = soft_day_widget_big (58dp)
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -20,42 +23,15 @@
         android:gravity="center_vertical"
         android:background="@drawable/widget_card_bg"
         android:paddingStart="18dp"
-        android:paddingEnd="18dp"
+        android:paddingEnd="16dp"
         android:paddingTop="14dp"
         android:paddingBottom="14dp">
-
-        <!-- Countdown ring, draining in real time -->
-        <FrameLayout
-            android:layout_width="62dp"
-            android:layout_height="62dp">
-
-            <ProgressBar
-                android:id="@+id/widget_ring"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="62dp"
-                android:layout_height="62dp"
-                android:progressDrawable="@drawable/widget_ring"
-                android:max="900"
-                android:progress="900"
-                android:indeterminate="false"/>
-
-            <TextView
-                android:id="@+id/widget_countdown"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:text="15:00"
-                android:textColor="@color/widget_heading"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-medium"/>
-        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="16dp"
+            android:layout_marginEnd="14dp"
             android:orientation="vertical">
 
             <TextView
@@ -102,5 +78,32 @@
                 android:textColor="@color/widget_accent"
                 android:textSize="11sp"/>
         </LinearLayout>
+
+        <!-- Compact countdown ring on the side, draining in real time -->
+        <FrameLayout
+            android:layout_width="40dp"
+            android:layout_height="40dp">
+
+            <ProgressBar
+                android:id="@+id/widget_ring"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:progressDrawable="@drawable/widget_ring"
+                android:max="900"
+                android:progress="900"
+                android:indeterminate="false"/>
+
+            <TextView
+                android:id="@+id/widget_countdown"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="15:00"
+                android:textColor="@color/widget_heading"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"/>
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

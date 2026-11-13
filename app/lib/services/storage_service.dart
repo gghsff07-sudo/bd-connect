@@ -331,6 +331,12 @@ class StorageService {
   Future<void> setFirebasePath(String v) async =>
       await setMeta('firebase_path', v.isEmpty ? 'items' : v);
 
+  /// Home-screen widget ring size: 's' | 'm' | 'l' (default 's').
+  Future<String> getWidgetSize() async =>
+      await getMeta('widget_size') ?? 's';
+  Future<void> setWidgetSize(String v) async => await setMeta(
+      'widget_size', v == 'm' || v == 'l' ? v : 's');
+
   Future<DateTime?> getLastPoll() async {
     final v = await getMeta('last_poll');
     return v == null ? null : DateTime.tryParse(v);

@@ -13,6 +13,7 @@ import 'widgets/countdown_ring.dart';
 import 'widgets/markdown_body_view.dart';
 import 'widgets/notification_permission_card.dart';
 import 'widgets/sync_ticks.dart';
+import 'widgets/update_dialog.dart';
 
 void main() {
   // Crash-proof entry: every init is guarded - worst case is an empty list.
@@ -747,58 +748,49 @@ class _DetailScreenState extends State<DetailScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Big bubble with the full markdown body
-              Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 40),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(22),
-                      topRight: Radius.circular(22),
-                      bottomLeft: Radius.circular(22),
-                      bottomRight: Radius.circular(6),
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Color(0x2E96826E),
-                          blurRadius: 18,
-                          offset: Offset(0, 6)),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      MarkdownBodyView(
+              // Full-width message card (not right-oriented)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x2E96826E),
+                        blurRadius: 18,
+                        offset: Offset(0, 6)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MarkdownBodyView(
                         body: item.body.isEmpty
                             ? '*(no details in this message)*'
                             : item.body,
                         baseUrl: (cloudBase ?? '').isEmpty ? null : cloudBase,
                         selectable: true,
                       ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              DateFormat('dd MMM yyyy, HH:mm')
-                                  .format(item.createdAt),
-                              style: const TextStyle(
-                                  fontSize: 11, color: AppColors.muted),
-                            ),
-                            const SizedBox(width: 5),
-                            SyncTicks(
-                                state: item.state.name,
-                                color: AppColors.muted),
-                          ],
-                        ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            DateFormat('dd MMM yyyy, HH:mm')
+                                .format(item.createdAt),
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.muted),
+                          ),
+                          const SizedBox(width: 5),
+                          SyncTicks(
+                              state: item.state.name,
+                              color: AppColors.muted),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -1176,6 +1168,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 14),
+          // --- App updates (GitHub releases) ---
+          SoftCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.system_update_alt,
+                        size: 18, color: AppColors.accent),
+                    SizedBox(width: 8),
+                    Text('APP UPDATES',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.muted)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Check for new versions',
+                            style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.heading),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Updates are delivered from the project\'s GitHub '
+                            'releases. The app downloads the APK and the '
+                            'system installer finishes the job.',
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.muted,
+                                height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 36,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: AppColors.onAccent,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18)),
+                        ),
+                        onPressed: () => showUpdateDialog(context),
+                        child: const Text('Check',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           // --- Widget help ---
           SoftCard(
             padding: const EdgeInsets.all(18),
@@ -1205,6 +1264,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(
                       fontSize: 13, color: AppColors.body, height: 1.45),
                 ),
+                const Divider(color: AppColors.trackOff, height: 26),
+                // --- Widget countdown ring size ---
+                Row(
+                  children: const [
+                    Icon(Icons.donut_small_outlined,
+                        size: 16, color: AppColors.accent),
+                    SizedBox(width: 8),
+                    Text('COUNTDOWN RING SIZE',
+                        style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.muted)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'The countdown ring sits on the right side of the widget. '
+                  'Pick a comfortable size; the widget refreshes instantly.',
+                  style: TextStyle(
+                      fontSize: 12.5, color: AppColors.muted, height: 1.4),
+                ),
+                const SizedBox(height: 10),
+                _WidgetSizePicker(),
               ],
             ),
           ),
@@ -1354,6 +1437,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
       prefixIcon: Icon(icon, color: AppColors.muted),
       labelStyle: const TextStyle(color: AppColors.muted, fontSize: 13.5),
       hintStyle: const TextStyle(color: AppColors.disabled, fontSize: 13),
+    );
+  }
+}
+
+/// Segmented picker for the home-screen widget's countdown ring size.
+/// Saves to meta storage and pushes it to the widget right away, so the
+/// widget re-renders with the new layout on the next tick (≤1s).
+class _WidgetSizePicker extends StatefulWidget {
+  const _WidgetSizePicker();
+
+  @override
+  State<_WidgetSizePicker> createState() => _WidgetSizePickerState();
+}
+
+class _WidgetSizePickerState extends State<_WidgetSizePicker> {
+  String _size = 's';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getWidgetSize();
+    if (mounted) setState(() {
+      _size = v;
+      _loading = false;
+    });
+  }
+
+  Future<void> _pick(String v) async {
+    if (_loading) return;
+    setState(() => _size = v);
+    await StorageService().setWidgetSize(v);
+    await WidgetService.updateWidget();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    Widget option(String value, String label, String hint) {
+      final selected = _size == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _pick(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.accent : AppColors.cardAlt,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: selected
+                      ? AppColors.accent
+                      : AppColors.trackOff),
+            ),
+            child: Column(
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.heading)),
+                const SizedBox(height: 1),
+                Text(hint,
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.muted)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        option('s', 'S', '40dp ring'),
+        const SizedBox(width: 8),
+        option('m', 'M', '48dp ring'),
+        const SizedBox(width: 8),
+        option('l', 'L', '58dp ring'),
+      ],
     );
   }
 }
