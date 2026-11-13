@@ -12,27 +12,23 @@ if (keyPropertiesFile.exists()) {
 
 android {
     namespace = "com.dbmonitor.db_monitor"
-    // compileSdk 36 (Androidx.Work 2.11 pulled by workmanager 0.10 needs 35+;
-    // 36 is also Flutter 3.47's default). targetSdk stays 34.
-    compileSdk = 36
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // flutter_local_notifications uses java.time APIs on minSdk 24
-        coreLibraryDesugaringEnabled = true
     }
 
-    // AGP 8 no longer generates BuildConfig by default; MainActivity reads
-    // BuildConfig.VERSION_NAME for the in-app updater.
+    // AGP 8 defaults this to false; the v2.4 in-app updater reads
+    // BuildConfig.VERSION_NAME from MainActivity.
     buildFeatures {
         buildConfig = true
     }
 
     defaultConfig {
         applicationId = "com.dbmonitor.db_monitor"
-        minSdkVersion = flutter.minSdkVersion
+        minSdk = 21
         targetSdk = 34
         versionCode = 6
         versionName = "2.4.0"
@@ -59,8 +55,13 @@ android {
     }
 }
 
-dependencies {
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+configurations.all {
+    // workmanager pulls work-runtime-ktx 2.7.1 while other plugins pull
+    // work-runtime 2.8.1 - unify on 2.8.1 to avoid duplicate classes.
+    resolutionStrategy {
+        force 'androidx.work:work-runtime:2.8.1'
+        force 'androidx.work:work-runtime-ktx:2.8.1'
+    }
 }
 
 flutter {

@@ -8,13 +8,13 @@ widget, and styled notifications with a full permission flow — all in the warm
 
 **Latest release: v2.4.0 (versionCode 6)** — install
 `db-monitor-v2.4.0.apk` from the [v2.4.0 release](../../releases/tag/v2.4.0)
-(Android 7.0+). The APK is built and attached automatically by GitHub Actions.
+(Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
 1. Download `db-monitor-v2.4.0.apk` from the
    [v2.4.0 release](../../releases/tag/v2.4.0) and copy it to your Android
-   phone (Android 7.0+).
+   phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
    v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 6).
 3. On first launch the app asks for **notification permission** — allow it so
@@ -74,7 +74,8 @@ widget, and styled notifications with a full permission flow — all in the warm
 
 ## Building from source
 
-Requirements: Flutter 3.47.x (built and tested with 3.47.9), Dart 3.4+, Android SDK 34, JDK 17.
+Requirements: Flutter 3.24.5 (the toolchain the shipped APKs are built with),
+Dart 3.5, Android SDK 34, JDK 17.
 
 ```bash
 cd app
@@ -91,25 +92,16 @@ signed APK and attaches it (plus a SHA-256 checksum) to that release —
 see [`.github/workflows/release-build.yml`](.github/workflows/release-build.yml).
 The workflow can also be run manually from the **Actions** tab.
 
-To reproduce the full project as originally delivered (sources + keystore +
-build config), unzip `releases/db-monitor-v2.3-project.zip`, or apply
-`releases/db-monitor-v2.3.patch` to an empty git repo:
-
-```bash
-mkdir my-repo && cd my-repo && git init
-git apply path/to/db-monitor-v2.3.patch
-git add -A && git commit -m "DB Monitor v2.3.0"
-```
-
 ## Repository layout
 
 ```
 app/        Flutter project (v2.4.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
-releases/   db-monitor-v2.4.apk, project zip, git patch
-archive/    earlier versions & predecessor apps (DB Alert, Notice Tracker)
 ```
+
+Earlier versions and predecessor apps (DB Alert, Notice Tracker) live in
+the project history before the cleanup.
 
 ## Connecting a cloud (optional)
 
@@ -141,8 +133,9 @@ device, sync waits until you configure one.
 
 ## Technical
 
-- Flutter 3.47, Dart 3.4+, minSdk 24 (Android 7.0+), targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6
+- Flutter 3.24.5, Dart 3.5, minSdk 21 (Android 5.0+), targetSdk 34, package
+  `com.dbmonitor.db_monitor`, versionName 2.4.0, versionCode 6, signed with
+  v1+v2 schemes (minSdk 21 keeps v1 so older devices accept the APK)
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
   timer + resume-triggered sync; exponential backoff via attempt counters
@@ -161,7 +154,7 @@ device, sync waits until you configure one.
 | --- | --- |
 | v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail (current) |
 | v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
-| v2.2 | Sync hardening, storage screen (see `archive/apk/`) |
-| v2.1 / v2.0 | Widget + sync iterations (see `archive/apk/`) |
-| DB Alert v1–v2 | Predecessor app (see `archive/`) |
-| Notice Tracker v1.0 | Original iteration (see `archive/`) |
+| v2.2 | Sync hardening, storage screen |
+| v2.1 / v2.0 | Widget + sync iterations |
+| DB Alert v1–v2 | Predecessor app |
+| Notice Tracker v1.0 | Original iteration |
