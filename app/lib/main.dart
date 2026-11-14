@@ -497,9 +497,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 size: 46, color: AppColors.accent),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
               _archivedCount > 0 ? 'All done!' : 'No messages yet',
-              style: TextStyle(
+              style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: AppColors.heading)),
