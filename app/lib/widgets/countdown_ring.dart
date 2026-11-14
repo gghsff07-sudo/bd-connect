@@ -15,11 +15,16 @@ class CountdownRing extends StatefulWidget {
   final VoidCallback onElapsed;
   final DateTime? lastPoll;
 
+  /// Text-only variant for the "minimal" countdown line: no ring, just
+  /// the MM:SS pill.
+  final bool compact;
+
   const CountdownRing({
     super.key,
     this.interval = const Duration(minutes: 15),
     required this.onElapsed,
     this.lastPoll,
+    this.compact = false,
   });
 
   @override
@@ -93,8 +98,10 @@ class _CountdownRingState extends State<CountdownRing> {
 
   @override
   Widget build(BuildContext context) {
-    // 'off' = ring hidden: compact time pill keeps the countdown readable.
-    if (_size == 'off') {
+    // Compact (minimal countdown line) and 'off' (ring hidden) both show
+    // the time pill; compact is always the small size.
+    final pillOnly = widget.compact || _size == 'off';
+    if (pillOnly) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(

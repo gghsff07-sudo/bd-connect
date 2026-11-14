@@ -133,8 +133,10 @@ class SyncService {
     if (newCount > 0) {
       final items = await _store.loadItems(limit: newCount);
       // Honor the per-type notification switches (Settings → Sync & alerts).
+      // Skip notices that arrived already completed (archive material).
       final notifyOn = await _store.getNotifyTypes();
       for (final item in items.take(newCount)) {
+        if (item.done) continue;
         if (notifyOn[item.type] ?? true) {
           await NotificationService.notifyItem(item);
         }

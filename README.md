@@ -6,22 +6,37 @@ WhatsApp-style cloud sync, Markdown message bodies, a real-time home-screen
 widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
-**Latest release: v2.6.0 (versionCode 8)** — install
-`db-monitor-v2.6.0.apk` from the [v2.6.0 release](../../releases/tag/v2.6.0)
+**Latest release: v2.7.0 (versionCode 9)** — install
+`db-monitor-v2.7.0.apk` from the [v2.7.0 release](../../releases/tag/v2.7.0)
 (Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
-1. Download `db-monitor-v2.6.0.apk` from the
-   [v2.6.0 release](../../releases/tag/v2.6.0) and copy it to your Android
+1. Download `db-monitor-v2.7.0.apk` from the
+   [v2.7.0 release](../../releases/tag/v2.7.0) and copy it to your Android
    phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
-   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 8).
+   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 9).
 3. On first launch the app asks for **notification permission** — allow it so
    database alerts can reach you (Android 13+).
 4. From v2.4 onward you never need to sideload again: **Settings → App
    updates → Check** looks up the latest GitHub release, downloads the APK
    and the system installer finishes the job.
+
+## What's new in v2.7
+
+- **Day groups now sit together** — the message list is sorted by the day
+  each notice *belongs* to (original posted date for TECMIS notices), not
+  by when they were synced, so each day chip heads one contiguous block.
+- **Countdown card can be hidden or shrunk** — Settings → Personalise →
+  Countdown card: *Full* (card with ring), *Minimal* (one compact line) or
+  *Hidden* (nothing above the list).
+- **The "Local mode / no cloud" banner is gone** — the main screen shows
+  only your notices (and real errors when a sync actually fails).
+- **WhatsApp-style archive** — anything you mark as done leaves the main
+  list and moves to the archive (top-right icon, with a count badge).
+  Only incomplete notices stay in front. Unarchive or delete from there;
+  search included.
 
 ## What's new in v2.6
 
@@ -145,7 +160,7 @@ The workflow can also be run manually from the **Actions** tab.
 ## Repository layout
 
 ```
-app/        Flutter project (v2.6.0) — lib/, android/, assets/, test/
+app/        Flutter project (v2.7.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
 ```
@@ -191,7 +206,7 @@ device, sync waits until you configure one.
 ## Technical
 
 - Flutter 3.24.5, Dart 3.5, minSdk 21 (Android 5.0+), targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.6.0, versionCode 8, signed with
+  `com.dbmonitor.db_monitor`, versionName 2.7.0, versionCode 9, signed with
   v1+v2 schemes (minSdk 21 keeps v1 so older devices accept the APK)
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
@@ -210,7 +225,8 @@ device, sync waits until you configure one.
 | Version | Notes |
 | --- | --- |
 | v2.5.0 | TECMIS deletion endpoints, authenticated writes, percent-encoded ids, install fix (v2.3 toolchain) |
-| v2.6.0 | Original-date grouping, TECMIS type + logo, variable ring sizes with hide option, widget fixes, full-width cards, grouped Settings tabs (current) |
+| v2.6.0 | Original-date grouping, TECMIS type + logo, variable ring sizes with hide option, widget fixes, full-width cards, grouped Settings tabs |
+| v2.7.0 | Contiguous day grouping, hideable countdown card, notice banner removed, WhatsApp-style archive for completed notices (current) |
 | v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail |
 | v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
 | v2.2 | Sync hardening, storage screen |

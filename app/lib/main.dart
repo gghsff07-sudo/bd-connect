@@ -60,6 +60,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _density = 'normal';
   bool _use24 = true;
   int _pollMinutes = 15;
+  int _archivedCount = 0;
+  String _countdownCardMode = 'full';
   StreamSubscription? _busSub;
 
   @override
@@ -110,7 +112,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _reload() async {
     try {
       final s = StorageService();
-      final items = await s.loadItems();
+      // Main chat list = INCOMPLETE notices only; completed ones live in
+      // the archive (WhatsApp-style). Sorted by the day each notice
+      // belongs to (original posted date), so the day chips group cleanly.
+      final items = await s.loadItems(done: false, byEffectiveDate: true);
       final last = await s.getLastPoll();
       final pending = await s.pendingCount();
       final granted = await NotificationService.isPermissionGranted();
@@ -119,6 +124,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final density = await s.getBubbleDensity();
       final use24 = await s.getUse24Hour();
       final pollMinutes = await s.getPollMinutes();
+      final archived = await s.archivedCount();
+      final cardMode = await s.getCountdownCardMode();
       if (mounted) {
         setState(() {
           _items = items;
@@ -128,6 +135,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _density = density;
           _use24 = use24;
           _pollMinutes = pollMinutes;
+          _archivedCount = archived;
+          _countdownCardMode = cardMode;
           _hasCloud = api.isNotEmpty ||
               fb.isNotEmpty ||
               AppConfig.hasApiConfig ||
@@ -186,8 +195,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final missing = AppConfig.missingKeys;
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -224,6 +231,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         actions: [
           IconButton(
+            tooltip: 'Archive ($_archivedCount completed)',
+            icon: Badge(
+              isLabelVisible: _archivedCount > 0,
+              label: Text('$_archivedCount'),
+              backgroundColor: AppColors.accentSoft,
+              textColor: AppColors.accentDark,
+              child: const Icon(Icons.archive_outlined,
+                  color: AppColors.heading),
+            ),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ArchiveScreen()));
+              _reload();
+            },
+          ),
+          IconButton(
             icon: _syncing
                 ? const SizedBox(
                     width: 18,
@@ -255,9 +278,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 setState(() => _notifGranted = granted);
               },
             ),
-          if (!_hasCloud || missing.isNotEmpty) _buildNoticeBanner(missing),
           if (_lastError != null) _buildErrorBanner(_lastError!),
-          _buildCountdownCard(),
+          _buildCountdownSection(),
           Expanded(child: _buildChatList()),
         ],
       ),
@@ -276,6 +298,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               },
             ),
     );
+  }
+
+  /// Countdown section between app bar and message list, following the
+  /// Settings choice:
+  ///   full    - card with ring (previous look)
+  ///   minimal - one compact text line, no card
+  ///   hidden  - nothing at all
+  Widget _buildCountdownSection() {
+    switch (_countdownCardMode) {
+      case 'hidden':
+        return const SizedBox.shrink();
+      case 'minimal':
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 2),
+          child: Row(
+            children: [
+              const Icon(Icons.schedule_outlined,
+                  size: 14, color: AppColors.muted),
+              const SizedBox(width: 6),
+              CountdownRing(
+                lastPoll: _lastPoll,
+                interval: effectiveInterval,
+                onElapsed: () => _sync(),
+                compact: true,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$_pendingCount pending \u2022 '
+                '${_lastPoll == null ? 'not synced yet' : 'last ${DateFormat('HH:mm').format(_lastPoll!)}'}',
+                style: const TextStyle(
+                    fontSize: 11.5, color: AppColors.muted),
+              ),
+            ],
+          ),
+        );
+      default:
+        return _buildCountdownCard();
+    }
   }
 
   Widget _buildCountdownCard() {
@@ -320,33 +380,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoticeBanner(List<String> missing) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.accentSoft,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.cloud_off_outlined,
-              size: 19, color: AppColors.accentDark),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Local mode: no cloud configured. Messages are stored on this '
-              'device and sync once you add a REST API or Firebase URL in '
-              'Settings \u2192 Cloud sync.',
-              style: const TextStyle(
-                  fontSize: 12.5, color: AppColors.accentDark, height: 1.35),
             ),
           ),
         ],
@@ -451,9 +484,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -467,7 +497,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 size: 46, color: AppColors.accent),
           ),
           const SizedBox(height: 16),
-          const Text('No messages yet',
+          const Text(
+              _archivedCount > 0 ? 'All done!' : 'No messages yet',
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -476,14 +507,311 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           SizedBox(
             width: 280,
             child: Text(
-              _hasCloud
-                  ? 'The database is synced every 15 minutes.\nNew messages will appear here as chat bubbles.'
-                  : 'Local mode: everything is stored on this device.\n'
-                    'Add a cloud (Firebase or REST API) in Settings \u2192 Cloud sync.',
+              _archivedCount > 0
+                  ? 'Everything is completed. Find the finished notices '
+                    'in the archive (top-right icon).'
+                  : _hasCloud
+                      ? 'The database is synced at your chosen interval.\n'
+                        'New messages will appear here as chat bubbles.'
+                      : 'Local mode: everything is stored on this device.\n'
+                        'Add a cloud in Settings \u2192 Cloud.',
               textAlign: TextAlign.center,
               style: const TextStyle(
                   fontSize: 13, color: AppColors.muted, height: 1.5),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// WhatsApp-style archive of COMPLETED notices. Anything marked done
+/// leaves the main chat list and lives here: grouped by the day it
+/// belongs to (original posted date), searchable, with one-tap
+/// unarchive (mark as undone) and delete.
+class ArchiveScreen extends StatefulWidget {
+  const ArchiveScreen({super.key});
+
+  @override
+  State<ArchiveScreen> createState() => _ArchiveScreenState();
+}
+
+class _ArchiveScreenState extends State<ArchiveScreen> {
+  List<MonitorItem> _items = [];
+  String _query = '';
+  bool _loading = true;
+  StreamSubscription? _busSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+    // React to background syncs while the archive is open.
+    _busSub = DataBus().changes.listen((_) => _reload());
+  }
+
+  @override
+  void dispose() {
+    _busSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    final items =
+        await StorageService().loadItems(done: true, byEffectiveDate: true);
+    if (mounted) {
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    }
+  }
+
+  List<MonitorItem> get _filtered {
+    if (_query.trim().isEmpty) return _items;
+    final q = _query.trim().toLowerCase();
+    return _items
+        .where((i) =>
+            i.title.toLowerCase().contains(q) ||
+            i.body.toLowerCase().contains(q))
+        .toList();
+  }
+
+  Future<void> _unarchive(MonitorItem item) async {
+    await StorageService().setDone(item.id, false);
+    await WidgetService.updateWidget();
+    await _reload();
+  }
+
+  Future<void> _delete(MonitorItem item) async {
+    await StorageService().deleteItem(item.id);
+    await WidgetService.updateWidget();
+    await _reload();
+  }
+
+  void _openDetail(MonitorItem item) {
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DetailScreen(
+              itemId: item.id,
+              onToggleDone: () => _unarchive(item),
+            )));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _filtered;
+    final oldestFirst = items.reversed.toList();
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        backgroundColor: AppColors.bg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text('Archive',
+            style: TextStyle(
+                color: AppColors.heading,
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                hintText: 'Search archived notices',
+                prefixIcon:
+                    const Icon(Icons.search, color: AppColors.muted),
+                filled: true,
+                fillColor: AppColors.card,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.trackOff),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.trackOff),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accent))
+          : items.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                          _query.isEmpty
+                              ? Icons.archive_outlined
+                              : Icons.search_off,
+                          size: 46,
+                          color: AppColors.disabled),
+                      const SizedBox(height: 12),
+                      Text(
+                          _query.isEmpty
+                              ? 'Nothing archived yet'
+                              : 'No matches',
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.muted)),
+                      const SizedBox(height: 6),
+                      const Text(
+                          'Notices you mark as done move here',
+                          style: TextStyle(
+                              fontSize: 12.5, color: AppColors.muted)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24, top: 4),
+                  itemCount: oldestFirst.length,
+                  itemBuilder: (context, i) {
+                    final item = oldestFirst[i];
+                    final showDay = i == 0 ||
+                        _dayKey(oldestFirst[i - 1]) != _dayKey(item);
+                    return Column(
+                      children: [
+                        if (showDay) _archiveDayDivider(_dayKey(item)),
+                        _ArchiveRow(
+                          item: item,
+                          onTap: () => _openDetail(item),
+                          onUnarchive: () => _unarchive(item),
+                          onDelete: () => _delete(item),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+    );
+  }
+
+  String _dayKey(MonitorItem item) {
+    final d = item.postedAt ?? item.createdAt;
+    final label = _sameDay(d, DateTime.now())
+        ? 'TODAY'
+        : _sameDay(d, DateTime.now().subtract(const Duration(days: 1)))
+            ? 'YESTERDAY'
+            : DateFormat('dd MMM yyyy').format(d).toUpperCase();
+    return label;
+  }
+
+  Widget _archiveDayDivider(String key) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(key,
+            style: const TextStyle(
+                fontSize: 10.5,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted)),
+      ),
+    );
+  }
+}
+
+/// One archived notice row: title + time + quick actions.
+class _ArchiveRow extends StatelessWidget {
+  final MonitorItem item;
+  final VoidCallback onTap;
+  final VoidCallback onUnarchive;
+  final VoidCallback onDelete;
+
+  const _ArchiveRow({
+    required this.item,
+    required this.onTap,
+    required this.onUnarchive,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppColors.typeColor(item.type);
+    final isTecmis = item.type == 'tecmis' || item.id.startsWith('tecmis-');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 3, 16, 3),
+      padding: const EdgeInsets.fromLTRB(12, 9, 6, 7),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x1496826E), blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (isTecmis)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 5),
+                          child: Image.asset(
+                            'assets/images/tecmis_logo.png',
+                            width: 13,
+                            height: 18,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Icon(
+                                Icons.school_outlined,
+                                size: 14,
+                                color: color),
+                          ),
+                        )
+                      else
+                        Icon(_typeIcon(item.type), size: 14, color: color),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.heading),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    DateFormat('dd MMM yyyy, HH:mm')
+                        .format(item.postedAt ?? item.createdAt),
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Move back to the main list',
+            icon: const Icon(Icons.unarchive_outlined,
+                size: 20, color: AppColors.accent),
+            onPressed: onUnarchive,
+          ),
+          IconButton(
+            tooltip: 'Delete everywhere',
+            icon: const Icon(Icons.delete_outline,
+                size: 20, color: AppColors.alert),
+            onPressed: onDelete,
           ),
         ],
       ),
@@ -725,6 +1053,9 @@ class _PlainPreview extends StatelessWidget {
     );
   }
 }
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 IconData _typeIcon(String type) {
   switch (type) {
@@ -1173,6 +1504,26 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
               const SizedBox(height: 10),
               const _WidgetSizePicker(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.timer_outlined, 'COUNTDOWN CARD'),
+              const SizedBox(height: 6),
+              const Text(
+                'How much space the sync countdown takes above the '
+                'message list: the full card with ring, one minimal text '
+                'line, or nothing at all.',
+                style: TextStyle(
+                    fontSize: 12.5, color: AppColors.muted, height: 1.4),
+              ),
+              const SizedBox(height: 10),
+              const _CountdownCardPicker(),
             ],
           ),
         ),
@@ -1800,6 +2151,106 @@ class _PollIntervalPickerState extends State<_PollIntervalPicker> {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Picker for the countdown card above the message list:
+/// full card / minimal line / hidden.
+class _CountdownCardPicker extends StatefulWidget {
+  const _CountdownCardPicker();
+
+  @override
+  State<_CountdownCardPicker> createState() => _CountdownCardPickerState();
+}
+
+class _CountdownCardPickerState extends State<_CountdownCardPicker> {
+  String _mode = 'full';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getCountdownCardMode();
+    if (mounted) {
+      setState(() {
+        _mode = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pick(String v) async {
+    if (_loading) return;
+    setState(() => _mode = v);
+    await StorageService().setCountdownCardMode(v);
+    // The home screen reads the mode on reload; nudge it via the bus.
+    DataBus().notify();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    Widget option(String value, String label, String hint) {
+      final selected = _mode == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _pick(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.accent : AppColors.cardAlt,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color:
+                      selected ? AppColors.accent : AppColors.trackOff),
+            ),
+            child: Column(
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.heading)),
+                const SizedBox(height: 1),
+                Text(hint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.muted)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        option('full', 'Full', 'card + ring'),
+        const SizedBox(width: 8),
+        option('minimal', 'Minimal', 'one line'),
+        const SizedBox(width: 8),
+        option('hidden', 'Hidden', 'nothing'),
       ],
     );
   }

@@ -28,7 +28,9 @@ class WidgetService {
   static Future<void> updateWidget() async {
     try {
       final s = StorageService();
-      final items = await s.loadItems(limit: 1);
+      // Main list = incomplete notices only (completed ones live in the
+      // archive), so the widget surfaces what still needs attention.
+      final items = await s.loadItems(limit: 1, done: false);
       final pending = await s.pendingCount();
       final lastPoll = await s.getLastPoll();
       final widgetSize = await s.getWidgetSize();
@@ -46,9 +48,7 @@ class WidgetService {
       final latest = items.isEmpty ? null : items.first;
       final latestTitle = latest == null
           ? 'No messages yet'
-          : (latest.done
-              ? latest.title
-              : '● ${latest.title}'); // pending dot, WhatsApp-style
+          : '● ${latest.title}'; // pending dot, WhatsApp-style
 
       await HomeWidget.saveWidgetData('pending', pending);
       await HomeWidget.saveWidgetData('nextCheckMs', nextCheckMs);

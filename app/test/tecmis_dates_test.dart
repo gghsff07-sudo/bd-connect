@@ -111,4 +111,45 @@ void main() {
     expect(d!.day, 11);
     expect(d!.minute, 51);
   });
+
+  test('v2.7: effective-date ordering groups days contiguously', () {
+    // Three notices: posted Nov 10 / Nov 11 / Nov 11 - but all synced on
+    // Nov 14 in a scrambled order. The chat list must sort by the day a
+    // notice BELONGS to (posted date), not by sync time, so the day chips
+    // group contiguously.
+    final lateSyncedEarlyNotice = MonitorItem.fromRemote({
+      'id': 'tecmis-file-261110090000-A.pdf',
+      'title': 'Posted Nov 10',
+      'body': '**Posted:** 2026-11-10 09:00',
+      'type': 'tecmis',
+      'createdAt': '2026-11-14T04:00:00.000Z',
+    });
+    final earlySyncedLateNotice = MonitorItem.fromRemote({
+      'id': 'tecmis-file-261111105101-B.pdf',
+      'title': 'Posted Nov 11',
+      'body': '**Posted:** 2026-11-11 10:51',
+      'type': 'tecmis',
+      'createdAt': '2026-11-14T02:00:00.000Z', // synced EARLIER
+    });
+    final secondNov11 = MonitorItem.fromRemote({
+      'id': 'tecmis-file-261111105200-C.pdf',
+      'title': 'Also Nov 11',
+      'body': '**Posted:** 2026-11-11 10:52',
+      'type': 'tecmis',
+      'createdAt': '2026-11-14T06:00:00.000Z', // synced LAST
+    });
+
+    // What loadItems(byEffectiveDate: true) computes:
+    final items = [lateSyncedEarlyNotice, earlySyncedLateNotice, secondNov11];
+    items.sort((a, b) =>
+        (b.postedAt ?? b.createdAt).compareTo(a.postedAt ?? a.createdAt));
+
+    // Newest first: the two Nov-11 notices above the Nov-10 one.
+    expect(items[0].postedAt!.day, 11);
+    expect(items[1].postedAt!.day, 11);
+    expect(items[2].postedAt!.day, 10);
+    // The two Nov-11 notices keep their posted-time order.
+    expect(items[0].id, endsWith('C.pdf'));
+    expect(items[1].id, endsWith('B.pdf'));
+  });
 }

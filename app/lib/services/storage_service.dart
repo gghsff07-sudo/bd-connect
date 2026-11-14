@@ -90,14 +90,44 @@ class StorageService {
 
   // ---------------- messages ----------------
 
-  Future<List<MonitorItem>> loadItems({int limit = 500}) async {
+  /// Load messages.
+  ///
+  /// [done] filters by completion (null = all, false = main chat list,
+  /// true = archive). [byEffectiveDate] re-sorts in Dart by the date a
+  /// message *belongs* to (TECMIS notices: their original posted date,
+  /// parsed from the body/id - not the day the scraper synced them), so
+  /// the day chips in the chat list group contiguously. The SQL order
+  /// (createdAt DESC) stays the default because the sync notification
+  /// path relies on "newest arrived first".
+  Future<List<MonitorItem>> loadItems(
+      {int limit = 500, bool? done, bool byEffectiveDate = false}) async {
     try {
       final d = await db;
       final rows = await d.query('messages',
-          orderBy: 'createdAt DESC, id', limit: limit);
-      return rows.map(_rowToItem).toList();
+          where: done == null ? null : 'done = ?',
+          whereArgs: done == null ? null : [done ? 1 : 0],
+          orderBy: 'createdAt DESC, id',
+          limit: limit);
+      final items = rows.map(_rowToItem).toList();
+      if (byEffectiveDate) {
+        items.sort((a, b) => (b.postedAt ?? b.createdAt)
+            .compareTo(a.postedAt ?? a.createdAt));
+      }
+      return items;
     } catch (_) {
       return [];
+    }
+  }
+
+  /// How many completed notices live in the archive.
+  Future<int> archivedCount() async {
+    try {
+      final d = await db;
+      final r = await d.rawQuery(
+          'SELECT COUNT(*) c FROM messages WHERE done = 1');
+      return Sqflite.firstIntValue(r) ?? 0;
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -406,6 +436,15 @@ class StorageService {
   Future<void> setTecmisSweepMode(String v) async =>
       await setMeta('tecmis_sweep',
           ['off', 'daily', 'weekly'].contains(v) ? v : 'daily');
+
+  /// Countdown card visibility: 'full' (card with ring) | 'minimal'
+  /// (single compact line, no card) | 'hidden' (nothing between the
+  /// app bar and the message list). Default 'full'.
+  Future<String> getCountdownCardMode() async =>
+      await getMeta('countdown_card') ?? 'full';
+  Future<void> setCountdownCardMode(String v) async =>
+      await setMeta('countdown_card',
+          ['full', 'minimal', 'hidden'].contains(v) ? v : 'full');
 
   Future<DateTime?> getLastPoll() async {
     final v = await getMeta('last_poll');
