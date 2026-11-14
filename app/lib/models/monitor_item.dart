@@ -120,10 +120,11 @@ class MonitorItem {
         .toLowerCase();
     // 'tecmis' is a first-class type (university notices synced from the
     // TECMIS scraper) - it keeps its own colour, icon and notification
-    // channel instead of collapsing into 'info'.
+    // channel instead of collapsing into 'info'. Older cloud entries carry
+    // no type field at all; their id prefix is the reliable signal.
     if (type != 'alert' && type != 'warning' && type != 'success' &&
         type != 'tecmis') {
-      type = 'info';
+      type = idRaw.startsWith('tecmis-') ? 'tecmis' : 'info';
     }
 
     DateTime? dt;
