@@ -8,8 +8,14 @@ import 'storage_service.dart';
 import 'widget_service.dart';
 import 'notification_service.dart';
 
-/// Poll/sync cadence shared by the UI, the timers and the background worker.
+/// Poll/sync cadence used by the UI and the background worker. The default
+/// is 15 minutes; users can personalise it in Settings (5/15/30/60) and
+/// [effectiveInterval] reflects that choice. WorkManager is re-registered
+/// with the new cadence whenever the setting changes.
 const Duration kPollInterval = Duration(minutes: 15);
+
+/// The currently configured sync interval (default [kPollInterval]).
+Duration effectiveInterval = kPollInterval;
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -126,15 +132,31 @@ class SyncService {
 
     if (newCount > 0) {
       final items = await _store.loadItems(limit: newCount);
+      // Honor the per-type notification switches (Settings → Sync & alerts).
+      final notifyOn = await _store.getNotifyTypes();
       for (final item in items.take(newCount)) {
-        await NotificationService.notifyItem(item);
+        if (notifyOn[item.type] ?? true) {
+          await NotificationService.notifyItem(item);
+        }
       }
     }
     return '';
   }
 
-  /// How often the TECMIS reconcile sweep may run (per device).
+  /// How often the TECMIS reconcile sweep may run (per device). The user
+  /// picks daily (default) or weekly in Settings, or turns it off.
   static const Duration _tecmisReconcileInterval = Duration(hours: 24);
+
+  Future<Duration> _sweepEvery() async {
+    switch (await _store.getTecmisSweepMode()) {
+      case 'off':
+        return Duration.zero;
+      case 'weekly':
+        return const Duration(days: 7);
+      default:
+        return _tecmisReconcileInterval;
+    }
+  }
 
   /// Best-effort cloud cleanup using the db-monitor-api's
   /// tecmis-delete-old endpoint: deletes every TECMIS notice in the cloud
@@ -149,10 +171,12 @@ class SyncService {
   ///    so a fresh install or a cleared database deletes nothing.
   Future<void> _maybeReconcileTecmis() async {
     try {
+      final every = await _sweepEvery();
+      if (every == Duration.zero) return; // sweep turned off
       final last = await _store.getMeta('tecmis_reconcile_at');
       final lastMs = int.tryParse(last ?? '') ?? 0;
       final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (nowMs - lastMs < _tecmisReconcileInterval.inMilliseconds) return;
+      if (nowMs - lastMs < every.inMilliseconds) return;
       final rows = await _store.tecmisRows();
       if (rows == null) return; // DB unreadable -> unknown state, do nothing
       final ids = rows
@@ -175,15 +199,20 @@ class SyncService {
   }
 }
 
-/// Registers the 15-minute background sync with WorkManager.
+/// Registers the background sync with WorkManager at the configured
+/// interval (Settings → Sync). Android's minimum periodic interval is
+/// 15 minutes; anything shorter falls back to an in-app timer only.
 Future<void> registerPeriodicPoll() async {
   try {
+    // Keep the global in sync with the stored setting first, so the UI
+    // ring and the widget count down over the right span.
+    effectiveInterval = await StorageService().getPollInterval();
     await Workmanager().initialize(callbackDispatcher);
     await Workmanager().cancelByUniqueName('db-monitor-poll');
     await Workmanager().registerPeriodicTask(
       'db-monitor-poll',
       'dbMonitorSync',
-      frequency: kPollInterval, // 15 min = Android's minimum periodic interval
+      frequency: effectiveInterval,
       constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingWorkPolicy.replace,
       backoffPolicy: BackoffPolicy.exponential,

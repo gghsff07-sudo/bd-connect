@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ring-less widget layout ("off" setting): text takes the full width,
+     a compact "next: MM:SS" line replaces the countdown ring.
+     See soft_day_widget.xml for the ring variants (s/m/l). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:id="@+id/widget_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:background="@drawable/widget_card_bg"
+        android:paddingStart="18dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DB MONITOR"
+            android:textColor="@color/widget_accent"
+            android:textSize="10sp"
+            android:letterSpacing="0.18"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/widget_pending"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="No pending items"
+            android:textColor="@color/widget_heading"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"/>
+
+        <TextView
+            android:id="@+id/widget_latest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="no messages yet"
+            android:textColor="@color/widget_muted"
+            android:textSize="12sp"/>
+
+        <TextView
+            android:id="@+id/widget_updated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="updated just now"
+            android:textColor="@color/widget_accent"
+            android:textSize="11sp"/>
+
+        <!-- Compact countdown text, replacing the ring -->
+        <TextView
+            android:id="@+id/widget_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="next sync 15:00"
+            android:textColor="@color/widget_heading"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"/>
+    </LinearLayout>
+</FrameLayout>

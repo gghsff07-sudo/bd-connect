@@ -13,8 +13,16 @@ import 'storage_service.dart';
 ///   lastPollLabel - String "last: HH:mm" for the second line
 ///   lastUpdateMs  - Long   wall-clock of the last data change (widget shows
 ///                   this as "updated Xs ago", ticking in real time)
+///   widgetSize    - String 's' | 'm' | 'l' ring size, 'off' hides the ring
+///   ringVisible   - Bool   false when the countdown ring is hidden
+///
+/// NOTE: androidName must be the BARE class name of the provider
+/// (home_widget prepends the package id). It is `SoftDayWidgetProvider` -
+/// the earlier `DbMonitorWidget` name resolved to a class that did not
+/// exist, so "apply instantly" pushes silently went nowhere and the widget
+/// only refreshed while its own ticker survived in the app process.
 class WidgetService {
-  static const _widgetName = 'DbMonitorWidget';
+  static const _widgetName = 'SoftDayWidgetProvider';
 
   /// Push the current state so the widget re-renders immediately.
   static Future<void> updateWidget() async {
@@ -24,6 +32,7 @@ class WidgetService {
       final pending = await s.pendingCount();
       final lastPoll = await s.getLastPoll();
       final widgetSize = await s.getWidgetSize();
+      final interval = await s.getPollInterval();
 
       final lastPollLabel = lastPoll == null
           ? 'never'
@@ -31,9 +40,8 @@ class WidgetService {
 
       // Next check timestamp (ms) so the widget computes its own countdown
       // and keeps ticking even when the Flutter engine is not running.
-      final nextCheckMs = (lastPoll ?? DateTime.now())
-          .add(const Duration(minutes: 15))
-          .millisecondsSinceEpoch;
+      final nextCheckMs =
+          (lastPoll ?? DateTime.now()).add(interval).millisecondsSinceEpoch;
 
       final latest = items.isEmpty ? null : items.first;
       final latestTitle = latest == null
@@ -48,11 +56,14 @@ class WidgetService {
       await HomeWidget.saveWidgetData('lastPollLabel', lastPollLabel);
       await HomeWidget.saveWidgetData('lastUpdateMs',
           DateTime.now().millisecondsSinceEpoch);
-      // Layout variant (s/m/l) the native provider picks per render.
+      await HomeWidget.saveWidgetData('intervalSecs', interval.inSeconds);
+      // Layout variant (s/m/l/off) the native provider picks per render.
       await HomeWidget.saveWidgetData('widgetSize', widgetSize);
+      await HomeWidget.saveWidgetData('ringVisible', widgetSize != 'off');
       await HomeWidget.updateWidget(androidName: _widgetName);
-    } catch (_) {
+    } catch (e) {
       // Widget is optional polish - never let it break the app.
+      if (kDebugMode) print('widget update skipped: $e');
     }
   }
 
@@ -70,7 +81,7 @@ class DataBus {
   Stream<void> get changes => _ctrl.stream;
 
   void notify() {
-    if (!kReleaseMode) {
+    if (!kDebugMode) {
       // no-op in release; debug prints are noise
     }
     _ctrl.add(null);

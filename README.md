@@ -6,22 +6,47 @@ WhatsApp-style cloud sync, Markdown message bodies, a real-time home-screen
 widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
-**Latest release: v2.5.0 (versionCode 7)** — install
-`db-monitor-v2.5.0.apk` from the [v2.5.0 release](../../releases/tag/v2.5.0)
+**Latest release: v2.6.0 (versionCode 8)** — install
+`db-monitor-v2.6.0.apk` from the [v2.6.0 release](../../releases/tag/v2.6.0)
 (Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
-1. Download `db-monitor-v2.5.0.apk` from the
-   [v2.5.0 release](../../releases/tag/v2.5.0) and copy it to your Android
+1. Download `db-monitor-v2.6.0.apk` from the
+   [v2.6.0 release](../../releases/tag/v2.6.0) and copy it to your Android
    phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
-   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 7).
+   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 8).
 3. On first launch the app asks for **notification permission** — allow it so
    database alerts can reach you (Android 13+).
 4. From v2.4 onward you never need to sideload again: **Settings → App
    updates → Check** looks up the latest GitHub release, downloads the APK
    and the system installer finishes the job.
+
+## What's new in v2.6
+
+- **Notices group by their original posted date** — TECMIS notices sit under
+  the day the university actually posted them (read from the notice's
+  "Posted:" line or the upload stamp in the id), not the day the scraper
+  synced them. Non-TECMIS messages keep using their creation time.
+- **New `tecmis` message type** — notices synced from
+  [logging-into-TECMIS](https://github.com/dev-sandakelum/logging-into-TECMIS)
+  keep their type, get their own colour, notification channel and the
+  TECMIS logo on the card, list and detail views.
+- **Countdown ring size is really variable now** — the S/M/L picker applies
+  to the in-app card AND the home-screen widget, plus a **Hidden** option
+  that swaps the ring for a compact time pill (in-app) / "next sync MM:SS"
+  line (widget).
+- **Widget reliability fix** — the update push called the provider by the
+  wrong name (`DbMonitorWidget` vs `SoftDayWidgetProvider`), so changes
+  only applied while the app process lived. Fixed; the widget now also
+  honours a custom sync interval.
+- **Full-width message cards** — bubbles stretch across the list (no more
+  right-oriented chat look), with left-aligned titles and previews.
+- **Personalisation settings, grouped into tabs** — Personalise (ring size,
+  sync interval 5/15/30/60 min, bubble density, 12/24-hour clock), Sync &
+  Alerts (per-type notification switches, TECMIS cleanup cadence), Storage
+  & Updates, and Cloud.
 
 ## What's new in v2.5
 
@@ -120,7 +145,7 @@ The workflow can also be run manually from the **Actions** tab.
 ## Repository layout
 
 ```
-app/        Flutter project (v2.5.0) — lib/, android/, assets/, test/
+app/        Flutter project (v2.6.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
 ```
@@ -166,7 +191,7 @@ device, sync waits until you configure one.
 ## Technical
 
 - Flutter 3.24.5, Dart 3.5, minSdk 21 (Android 5.0+), targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.5.0, versionCode 7, signed with
+  `com.dbmonitor.db_monitor`, versionName 2.6.0, versionCode 8, signed with
   v1+v2 schemes (minSdk 21 keeps v1 so older devices accept the APK)
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
@@ -184,7 +209,8 @@ device, sync waits until you configure one.
 
 | Version | Notes |
 | --- | --- |
-| v2.5.0 | TECMIS deletion endpoints, authenticated writes, percent-encoded ids, install fix (v2.3 toolchain) (current) |
+| v2.5.0 | TECMIS deletion endpoints, authenticated writes, percent-encoded ids, install fix (v2.3 toolchain) |
+| v2.6.0 | Original-date grouping, TECMIS type + logo, variable ring sizes with hide option, widget fixes, full-width cards, grouped Settings tabs (current) |
 | v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail |
 | v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
 | v2.2 | Sync hardening, storage screen |

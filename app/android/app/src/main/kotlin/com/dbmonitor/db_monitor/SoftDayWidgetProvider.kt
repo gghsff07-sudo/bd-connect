@@ -29,15 +29,17 @@ import es.antonborri.home_widget.HomeWidgetPlugin
 class SoftDayWidgetProvider : AppWidgetProvider() {
 
     /**
-     * Layout for the current widget size setting (s/m/l), pushed by the
-     * Flutter side as "widgetSize". Ring sits on the right side in all
-     * three; sizes and fonts scale up per level.
+     * Layout for the current widget size setting (s/m/l/off), pushed by the
+     * Flutter side as "widgetSize". Ring sits on the right side in s/m/l;
+     * "off" swaps to a text-only layout with a compact countdown line.
      */
-    private fun layoutFor(prefs: android.content.SharedPreferences): Int = when (prefs.getString("widgetSize", "s")) {
-        "m" -> R.layout.soft_day_widget_med
-        "l" -> R.layout.soft_day_widget_big
-        else -> R.layout.soft_day_widget
-    }
+    private fun layoutFor(prefs: android.content.SharedPreferences): Int =
+        when (prefs.getString("widgetSize", "s")) {
+            "m" -> R.layout.soft_day_widget_med
+            "l" -> R.layout.soft_day_widget_big
+            "off" -> R.layout.soft_day_widget_noring
+            else -> R.layout.soft_day_widget
+        }
 
     override fun onUpdate(
         context: Context,
@@ -105,6 +107,7 @@ class SoftDayWidgetProvider : AppWidgetProvider() {
         val nextCheckMs = prefs.getLong("nextCheckMs", 0L)
         val latestTitle = prefs.getString("latestTitle", null)
         val lastUpdateMs = prefs.getLong("lastUpdateMs", 0L)
+        val ringVisible = prefs.getBoolean("ringVisible", true)
 
         // --- countdown (ticks every second) ---
         val remainMs =
@@ -112,12 +115,26 @@ class SoftDayWidgetProvider : AppWidgetProvider() {
         val totalSecs = ((remainMs / 1000L).coerceAtLeast(0L)).toInt()
         val mm = (totalSecs / 60).coerceAtMost(99)
         val ss = totalSecs % 60
-        views.setTextViewText(
-            R.id.widget_countdown,
-            String.format("%02d:%02d", mm, ss)
-        )
-        // Ring drains as the countdown progresses (900s = 15min full ring).
-        views.setProgressBar(R.id.widget_ring, 900, totalSecs.coerceAtMost(900), false)
+
+        if (ringVisible) {
+            views.setTextViewText(
+                R.id.widget_countdown,
+                String.format("%02d:%02d", mm, ss)
+            )
+            // Ring drains as the countdown progresses, over the configured
+            // interval (intervalSecs, default 900s = 15 min).
+            val total = (prefs.getInt("intervalSecs", 900)).coerceAtLeast(60)
+            views.setProgressBar(
+                R.id.widget_ring, total,
+                totalSecs.coerceAtMost(total), false
+            )
+        } else {
+            // Ring-less layout: the countdown line carries the remaining time.
+            views.setTextViewText(
+                R.id.widget_countdown,
+                String.format("next sync %02d:%02d", mm, ss)
+            )
+        }
 
         // --- pending count ---
         views.setTextViewText(

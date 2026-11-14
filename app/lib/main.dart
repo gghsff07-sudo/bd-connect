@@ -57,6 +57,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _syncing = false;
   bool _hasCloud = false;
   bool _notifGranted = true;
+  String _density = 'normal';
+  bool _use24 = true;
+  int _pollMinutes = 15;
   StreamSubscription? _busSub;
 
   @override
@@ -92,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) setState(() => _notifGranted = granted);
     } catch (_) {}
     try {
-      await registerPeriodicPoll();
+      await registerPeriodicPoll(); // also loads effectiveInterval
     } catch (_) {}
     try {
       await HomeWidget.setAppGroupId('com.dbmonitor.db_monitor');
@@ -113,12 +116,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final granted = await NotificationService.isPermissionGranted();
       final api = await s.getApiUrl();
       final fb = await s.getFirebaseUrl();
+      final density = await s.getBubbleDensity();
+      final use24 = await s.getUse24Hour();
+      final pollMinutes = await s.getPollMinutes();
       if (mounted) {
         setState(() {
           _items = items;
           _lastPoll = last;
           _pendingCount = pending;
           _notifGranted = granted;
+          _density = density;
+          _use24 = use24;
+          _pollMinutes = pollMinutes;
           _hasCloud = api.isNotEmpty ||
               fb.isNotEmpty ||
               AppConfig.hasApiConfig ||
@@ -130,8 +139,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _startInAppTimer() {
     _timer?.cancel();
-    // Foreground fallback sync, every 15 minutes.
-    _timer = Timer.periodic(kPollInterval, (_) => _sync());
+    // Foreground fallback sync at the configured interval.
+    _timer =
+        Timer.periodic(effectiveInterval, (_) => _sync());
   }
 
   Future<void> _sync({bool silent = false}) async {
@@ -204,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             Text(
-              _syncing ? 'syncing…' : 'synced \u2022 every 15 min',
+              _syncing
+                  ? 'syncing…'
+                  : 'synced \u2022 every $_pollMinutes min',
               style: const TextStyle(
                   fontSize: 11, letterSpacing: 1.2, color: AppColors.muted),
             ),
@@ -274,6 +286,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           CountdownRing(
             lastPoll: _lastPoll,
+            interval: effectiveInterval,
             onElapsed: () => _sync(),
           ),
           const SizedBox(width: 14),
@@ -291,7 +304,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _syncing ? 'Syncing now…' : 'Auto-sync countdown',
+                  _syncing
+                      ? 'Syncing now…'
+                      : 'Auto-sync countdown (every $_pollMinutes min)',
                   style: const TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w600,
@@ -365,6 +380,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// WhatsApp-style chat list: newest at the bottom, grouped by day with
   /// soft dividers, right-aligned bubbles with tick + time.
+  ///
+  /// TECMIS notices group by their ORIGINAL posted date (the university's
+  /// Add Date, recovered from the notice body/id), not by when the scraper
+  /// happened to upload them to the cloud - so an old notice lands under
+  /// its own day, exactly as it does on the TECMIS NOTICE page.
   Widget _buildChatList() {
     if (_items.isEmpty) return _buildEmptyState();
     final oldestFirst = _items.reversed.toList();
@@ -375,13 +395,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         itemCount: oldestFirst.length,
         itemBuilder: (context, i) {
           final item = oldestFirst[i];
-          final showDay = i == 0 ||
-              !_sameDay(oldestFirst[i - 1].createdAt, item.createdAt);
+          final day = _dayOf(item);
+          final showDay =
+              i == 0 || _dayOf(oldestFirst[i - 1]) != day;
           return Column(
             children: [
-              if (showDay) _dayDivider(item.createdAt),
+              if (showDay) _dayDivider(day),
               _Bubble(
                 item: item,
+                density: _density,
+                use24: _use24,
                 onTap: () => _openDetail(item),
                 onToggleDone: () => _toggleDone(item),
                 onDelete: () => _delete(item),
@@ -393,10 +416,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// The day a message belongs to (original posted date when known).
+  DateTime _dayOf(MonitorItem item) {
+    final posted = item.postedAt;
+    return posted ?? item.createdAt;
+  }
+
   Widget _dayDivider(DateTime t) {
     final label = _sameDay(t, DateTime.now())
         ? 'TODAY'
-        : DateFormat('dd MMM yyyy').format(t).toUpperCase();
+        : _sameDay(t, DateTime.now().subtract(const Duration(days: 1)))
+            ? 'YESTERDAY'
+            : DateFormat('dd MMM yyyy').format(t).toUpperCase();
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 60),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -460,122 +491,170 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-/// One WhatsApp-style message bubble (right-aligned, incoming tint).
+/// One message card: full-width (no chat-style right alignment), incoming
+/// tint, type icon or TECMIS logo, and a posted/loaded time row.
 class _Bubble extends StatelessWidget {
   final MonitorItem item;
+  final String density; // compact | normal | full
+  final bool use24;
   final VoidCallback onTap;
   final VoidCallback onToggleDone;
   final VoidCallback onDelete;
 
   const _Bubble({
     required this.item,
+    this.density = 'normal',
+    this.use24 = true,
     required this.onTap,
     required this.onToggleDone,
     required this.onDelete,
   });
 
+  String _fmtTime(DateTime t) =>
+      DateFormat(use24 ? 'HH:mm' : 'h:mm a').format(t);
+
   @override
   Widget build(BuildContext context) {
     final color = AppColors.typeColor(item.type);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onLongPress: () => _showActions(context),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(60, 3, 16, 3),
-          padding: const EdgeInsets.fromLTRB(12, 9, 10, 7),
-          decoration: BoxDecoration(
-            color: item.done ? AppColors.card : AppColors.chatMe,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(18),
-              topRight: Radius.circular(18),
-              bottomLeft: Radius.circular(18),
-              bottomRight: Radius.circular(4),
-            ),
-            boxShadow: const [
-              BoxShadow(
-                  color: Color(0x1E96826E),
-                  blurRadius: 8,
-                  offset: Offset(0, 2)),
-            ],
+    final isTecmis = item.type == 'tecmis' || item.id.startsWith('tecmis-');
+    return GestureDetector(
+      onLongPress: () => _showActions(context),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 3, 16, 3),
+        padding: const EdgeInsets.fromLTRB(12, 9, 10, 7),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: item.done ? AppColors.card : AppColors.chatMe,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(18),
+            bottomRight: Radius.circular(4),
           ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x1E96826E),
+                blurRadius: 8,
+                offset: Offset(0, 2)),
+          ],
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (isTecmis)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 5),
+                      child: Image.asset(
+                        'assets/images/tecmis_logo.png',
+                        width: 15,
+                        height: 21,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                            Icons.school_outlined,
+                            size: 15,
+                            color: color),
+                      ),
+                    )
+                  else
                     Icon(_typeIcon(item.type), size: 15, color: color),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: item.seen || item.done
-                              ? FontWeight.w600
-                              : FontWeight.w700,
-                          color: item.done ? AppColors.muted : AppColors.heading,
-                        ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: item.seen || item.done
+                            ? FontWeight.w600
+                            : FontWeight.w700,
+                        color:
+                            item.done ? AppColors.muted : AppColors.heading,
                       ),
                     ),
-                  ],
-                ),
-                if (item.body.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 250),
-                    child: item.hasMarkdown
-                        ? _PlainPreview(item.body)
-                        : Text(
-                            item.body,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 13,
-                                height: 1.4,
-                                color: item.done
-                                    ? AppColors.disabled
-                                    : AppColors.muted),
-                          ),
                   ),
-                ],
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (item.done)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text('DONE',
-                            style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.success)),
+                  // Small TECMIS tag next to the title.
+                  if (isTecmis) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.tecmis.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(7),
                       ),
-                    if (item.done) const SizedBox(width: 6),
-                    Text(
-                      DateFormat('HH:mm').format(item.createdAt),
-                      style: const TextStyle(
-                          fontSize: 10.5, color: AppColors.muted),
+                      child: const Text('TECMIS',
+                          style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: AppColors.tecmis)),
                     ),
-                    const SizedBox(width: 4),
-                    SyncTicks(state: item.state.name, color: AppColors.muted),
                   ],
+                ],
+              ),
+              if (item.body.isNotEmpty && density != 'compact') ...[
+                const SizedBox(height: 3),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: item.hasMarkdown
+                      ? _PlainPreview(item.body,
+                          maxLines: density == 'full' ? 6 : 3)
+                      : Text(
+                          item.body,
+                          maxLines: density == 'full' ? 6 : 3,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: item.done
+                                  ? AppColors.disabled
+                                  : AppColors.muted),
+                        ),
                 ),
               ],
-            ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (item.done)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('DONE',
+                          style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.success)),
+                    ),
+                  if (item.done) const SizedBox(width: 6),
+                  Text(
+                    // TECMIS notices show their ORIGINAL posted time.
+                    _fmtTime(item.postedAt ?? item.createdAt),
+                    style: const TextStyle(
+                        fontSize: 10.5, color: AppColors.muted),
+                  ),
+                  if (item.postedAt != null) ...[
+                    const SizedBox(width: 4),
+                    const Text('posted',
+                        style: TextStyle(
+                            fontSize: 9, color: AppColors.muted)),
+                  ],
+                  const Spacer(),
+                  SyncTicks(state: item.state.name, color: AppColors.muted),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -624,7 +703,8 @@ class _Bubble extends StatelessWidget {
 /// One-line markdown preview inside the bubble (taps open the full render).
 class _PlainPreview extends StatelessWidget {
   final String md;
-  const _PlainPreview(this.md);
+  final int maxLines;
+  const _PlainPreview(this.md, {this.maxLines = 3});
 
   @override
   Widget build(BuildContext context) {
@@ -638,8 +718,9 @@ class _PlainPreview extends StatelessWidget {
     t = t.replaceAll('`', '');
     return Text(
       t.trim(),
-      maxLines: 3,
+      maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.left,
       style: const TextStyle(fontSize: 13, height: 1.4, color: AppColors.muted),
     );
   }
@@ -653,6 +734,8 @@ IconData _typeIcon(String type) {
       return Icons.warning_amber_rounded;
     case 'success':
       return Icons.check_circle_outline;
+    case 'tecmis':
+      return Icons.school_outlined;
     default:
       return Icons.info_outline;
   }
@@ -694,6 +777,8 @@ class _DetailScreenState extends State<DetailScreen> {
           body: Center(child: CircularProgressIndicator()));
     }
     final color = AppColors.typeColor(item.type);
+    final isTecmis = item.type == 'tecmis' || item.id.startsWith('tecmis-');
+    final posted = item.postedAt;
     final s = StorageService();
     String? cloudBase;
     final f = s.getFirebaseUrl();
@@ -710,7 +795,18 @@ class _DetailScreenState extends State<DetailScreen> {
             CircleAvatar(
               radius: 17,
               backgroundColor: color.withOpacity(0.16),
-              child: Icon(_typeIcon(item.type), color: color, size: 18),
+              child: isTecmis
+                  ? Image.asset(
+                      'assets/images/tecmis_logo.png',
+                      width: 16,
+                      height: 22,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Icon(
+                          _typeIcon(item.type),
+                          color: color,
+                          size: 18),
+                    )
+                  : Icon(_typeIcon(item.type), color: color, size: 18),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -777,6 +873,13 @@ class _DetailScreenState extends State<DetailScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (posted != null) ...[
+                            Text(
+                              'posted ${DateFormat('dd MMM, HH:mm').format(posted)} · ',
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppColors.tecmis),
+                            ),
+                          ],
                           Text(
                             DateFormat('dd MMM yyyy, HH:mm')
                                 .format(item.createdAt),
@@ -811,6 +914,11 @@ class _DetailScreenState extends State<DetailScreen> {
                         icon: _typeIcon(item.type), color: color),
                     _metaRow('ID', item.id),
                     _metaRow('Source', item.source ?? 'remote'),
+                    if (posted != null)
+                      _metaRow('Posted',
+                          DateFormat('dd MMM yyyy, HH:mm').format(posted),
+                          icon: Icons.event_outlined,
+                          color: AppColors.tecmis),
                     _metaRow('Received',
                         DateFormat('dd MMM yyyy, HH:mm').format(item.createdAt)),
                     _metaRow('Status', item.done ? 'Done' : 'Pending',
@@ -897,7 +1005,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with SingleTickerProviderStateMixin {
   final _apiUrl = TextEditingController();
   final _fbUrl = TextEditingController();
   final _fbPath = TextEditingController();
@@ -906,6 +1015,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _messages = 0;
   int _dbBytes = 0;
   bool _notifGranted = true;
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void initState() {
@@ -931,6 +1041,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiUrl.dispose();
     _fbUrl.dispose();
     _fbPath.dispose();
+    _tabs.dispose();
     super.dispose();
   }
 
@@ -939,18 +1050,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await s.setApiUrl(_apiUrl.text.trim());
     await s.setFirebaseUrl(_fbUrl.text.trim());
     await s.setFirebasePath(_fbPath.text.trim());
-    await registerPeriodicPoll(); // re-register with new config
+    await registerPeriodicPoll(); // re-register with new config + interval
     await SyncService().syncOnce();
     await WidgetService.updateWidget();
     if (mounted) {
+      final mins = await s.getPollMinutes();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.accent,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: const Text(
-            'Saved. Cloud sync runs every 15 minutes.',
-            style: TextStyle(color: AppColors.onAccent)),
+        content: Text(
+            'Saved. Cloud sync runs every $mins minute(s).',
+            style: const TextStyle(color: AppColors.onAccent)),
       ));
       Navigator.of(context).pop();
     }
@@ -1010,389 +1122,455 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: AppColors.heading,
                 fontSize: 18,
                 fontWeight: FontWeight.w700)),
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          indicatorColor: AppColors.accent,
+          labelColor: AppColors.accentDark,
+          unselectedLabelColor: AppColors.muted,
+          labelStyle: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w700),
+          unselectedLabelStyle: const TextStyle(fontSize: 13),
+          tabs: const [
+            Tab(text: 'PERSONALISE'),
+            Tab(text: 'SYNC & ALERTS'),
+            Tab(text: 'STORAGE & UPDATES'),
+            Tab(text: 'CLOUD'),
+          ],
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: TabBarView(
+        controller: _tabs,
         children: [
-          // --- Storage management (WhatsApp style) ---
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.storage_outlined,
-                        size: 18, color: AppColors.accent),
-                    SizedBox(width: 8),
-                    Text('STORAGE AND DATA',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.6,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                _storageRow('Messages stored', '$_messages'),
-                _storageRow('Pending uploads', '$_outbox'),
-                _storageRow('Database size', _fmtBytes(_dbBytes)),
-                _storageRow(
-                    'Last sync',
-                    _lastSync == null
-                        ? 'never'
-                        : DateFormat('dd MMM, HH:mm').format(_lastSync!)),
-                const Divider(color: AppColors.trackOff, height: 24),
-                SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentDark,
-                      side: const BorderSide(color: AppColors.accent),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
-                    ),
-                    onPressed: () => _confirm(
-                      'Trim old messages?',
-                      'Messages older than 30 days will be removed from this '
-                      'device. Cloud copies stay; deletions still sync.',
-                      () async {
-                        await StorageService().trimOlderThan(30);
-                      },
-                    ),
-                    icon: const Icon(Icons.cleaning_services_outlined,
-                        size: 17),
-                    label: const Text('Free up space (30+ days)',
-                        style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.alert,
-                      side: const BorderSide(color: AppColors.alert),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20)),
-                    ),
-                    onPressed: () => _confirm(
-                      'Clear all messages?',
-                      'All messages will be removed from this device. '
-                      'They may return if the cloud still holds them.',
-                      () async {
-                        await StorageService().clearAllMessages();
-                      },
-                    ),
-                    icon: const Icon(Icons.delete_sweep_outlined, size: 17),
-                    label: const Text('Clear all messages',
-                        style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // --- Notifications ---
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.notifications_active_outlined,
-                        size: 18, color: AppColors.accent),
-                    SizedBox(width: 8),
-                    Text('NOTIFICATIONS',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.6,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                              _notifGranted
-                                  ? 'Permission granted'
-                                  : 'Permission needed',
-                              style: const TextStyle(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.heading)),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Alerts ring and vibrate, warnings play a sound, '
-                            'info and success are silent.',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.muted,
-                                height: 1.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _notifGranted
-                        ? const Icon(Icons.check_circle,
-                            color: AppColors.success, size: 24)
-                        : SizedBox(
-                            height: 36,
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: AppColors.accent,
-                                foregroundColor: AppColors.onAccent,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(18)),
-                              ),
-                              onPressed: () async {
-                                final g = await NotificationService
-                                    .requestPermission();
-                                setState(() => _notifGranted = g);
-                              },
-                              child: const Text('Allow',
-                                  style: TextStyle(fontSize: 13)),
-                            ),
-                          ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // --- App updates (GitHub releases) ---
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.system_update_alt,
-                        size: 18, color: AppColors.accent),
-                    SizedBox(width: 8),
-                    Text('APP UPDATES',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.6,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Check for new versions',
-                            style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.heading),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Updates are delivered from the project\'s GitHub '
-                            'releases. The app downloads the APK and the '
-                            'system installer finishes the job.',
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.muted,
-                                height: 1.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      height: 36,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: AppColors.onAccent,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18)),
-                        ),
-                        onPressed: () => showUpdateDialog(context),
-                        child: const Text('Check',
-                            style: TextStyle(fontSize: 13)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // --- Widget help ---
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.widgets_outlined,
-                        size: 18, color: AppColors.accent),
-                    SizedBox(width: 8),
-                    Text('HOME-SCREEN WIDGET',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.6,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Add the DB Monitor widget: long-press an empty home-screen '
-                  'area \u2192 Widgets \u2192 DB Monitor. It updates in real '
-                  'time: a ticking countdown to the next sync, "updated Ns '
-                  'ago" for the last data change, pending count and the '
-                  'latest message.',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.body, height: 1.45),
-                ),
-                const Divider(color: AppColors.trackOff, height: 26),
-                // --- Widget countdown ring size ---
-                Row(
-                  children: const [
-                    Icon(Icons.donut_small_outlined,
-                        size: 16, color: AppColors.accent),
-                    SizedBox(width: 8),
-                    Text('COUNTDOWN RING SIZE',
-                        style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.6,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'The countdown ring sits on the right side of the widget. '
-                  'Pick a comfortable size; the widget refreshes instantly.',
-                  style: TextStyle(
-                      fontSize: 12.5, color: AppColors.muted, height: 1.4),
-                ),
-                const SizedBox(height: 10),
-                _WidgetSizePicker(),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // --- Cloud sync config ---
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('CLOUD SYNC',
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 1.6,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.muted)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Optional. Without a cloud the app works fully offline '
-                  '(local mode). With a cloud, messages sync every 15 '
-                  'minutes: local changes upload first, then remote changes '
-                  'merge in (newest wins).',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.body, height: 1.45),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _apiUrl,
-                  keyboardType: TextInputType.url,
-                  decoration: _inputDec(
-                      'REST API URL (returns JSON list)',
-                      'https://example.com/api/items',
-                      Icons.api),
-                ),
-                const SizedBox(height: 14),
-                const Text('\u2014 or \u2014',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.muted)),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _fbUrl,
-                  keyboardType: TextInputType.url,
-                  decoration: _inputDec(
-                      'Firebase Realtime DB URL (optional)',
-                      'https://your-db.firebaseio.com',
-                      Icons.local_fire_department_outlined),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _fbPath,
-                  decoration: _inputDec(
-                      'Firebase path (default: items)', 'items',
-                      Icons.account_tree),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 52,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: AppColors.onAccent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26)),
-              ),
-              onPressed: _save,
-              icon: const Icon(Icons.cloud_sync),
-              label: const Text('Save and sync now'),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SoftCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('HOW IT WORKS',
-                    style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 1.6,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.muted)),
-                SizedBox(height: 8),
-                Text(
-                  '\u2022 Messages are stored locally (SQLite) and synced with '
-                  'the cloud every 15 minutes, even when the app is closed.\n'
-                  '\u2022 Offline edits queue in the outbox and upload when '
-                  'you are back online - the ticks show the state '
-                  '(clock = queued, tick = uploading, double tick = synced).\n'
-                  '\u2022 Message bodies understand Markdown: headings, lists, '
-                  '**bold**, code, links, images and [video](url) players.\n'
-                  '\u2022 Deletes propagate to the cloud via tombstones, so '
-                  'nothing deleted comes back.\n'
-                  '\u2022 The widget ticks in real time and shows the last '
-                  'update time.',
-                  style: TextStyle(
-                      fontSize: 13, height: 1.55, color: AppColors.body),
-                ),
-              ],
-            ),
-          ),
+          _personaliseTab(),
+          _syncAlertsTab(),
+          _storageUpdatesTab(),
+          _cloudTab(),
         ],
       ),
+    );
+  }
+
+  // ------------------------------------------------ PERSONALISE tab ----
+  Widget _personaliseTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.donut_small_outlined,
+                  'COUNTDOWN RING SIZE'),
+              const SizedBox(height: 6),
+              const Text(
+                'Applies to both the in-app card and the home-screen '
+                'widget. Pick a comfortable size, or hide the ring entirely '
+                'and keep a small time pill instead.',
+                style: TextStyle(
+                    fontSize: 12.5, color: AppColors.muted, height: 1.4),
+              ),
+              const SizedBox(height: 10),
+              const _WidgetSizePicker(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.schedule_outlined, 'SYNC INTERVAL'),
+              const SizedBox(height: 6),
+              const Text(
+                'How often the app pulls your database and refreshes the '
+                'widget. Background jobs on Android cannot run more often '
+                'than every 15 minutes; shorter choices apply while the app '
+                'is open.',
+                style: TextStyle(
+                    fontSize: 12.5, color: AppColors.muted, height: 1.4),
+              ),
+              const SizedBox(height: 10),
+              const _PollIntervalPicker(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.message_outlined, 'MESSAGE LAYOUT'),
+              const SizedBox(height: 10),
+              const _BubbleDensityPicker(),
+              const Divider(color: AppColors.trackOff, height: 26),
+              const _TimeFormatPicker(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.widgets_outlined, 'HOME-SCREEN WIDGET'),
+              const SizedBox(height: 10),
+              const Text(
+                'Add the widget: long-press an empty home-screen area \u2192 '
+                'Widgets \u2192 DB Monitor. It updates in real time: countdown '
+                'to the next sync, "updated Ns ago", pending count and the '
+                'latest message - in the ring size picked above.',
+                style: TextStyle(
+                    fontSize: 13, color: AppColors.body, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ------------------------------------------------ SYNC & ALERTS tab ----
+  Widget _syncAlertsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(
+                  Icons.notifications_active_outlined, 'NOTIFICATIONS'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _notifGranted
+                              ? 'Permission granted'
+                              : 'Permission needed',
+                          style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.heading),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Alerts ring and vibrate, warnings and TECMIS '
+                          'notices play a sound, info and success are silent.',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.muted,
+                              height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _notifGranted
+                      ? const Icon(Icons.check_circle,
+                          color: AppColors.success, size: 24)
+                      : SizedBox(
+                          height: 36,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              foregroundColor: AppColors.onAccent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(18)),
+                            ),
+                            onPressed: () async {
+                              final g = await NotificationService
+                                  .requestPermission();
+                              setState(() => _notifGranted = g);
+                            },
+                            child: const Text('Allow',
+                                style: TextStyle(fontSize: 13)),
+                          ),
+                        ),
+                ],
+              ),
+              const Divider(color: AppColors.trackOff, height: 26),
+              const _NotifyTypesPicker(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.cloud_sync_outlined, 'TECMIS CLEANUP'),
+              const SizedBox(height: 6),
+              const Text(
+                'Once a day the app tells the backend which TECMIS notices '
+                'it still holds, so cloud copies of deleted notices are '
+                'removed too. It never runs when the local list is empty.',
+                style: TextStyle(
+                    fontSize: 12.5, color: AppColors.muted, height: 1.4),
+              ),
+              const SizedBox(height: 10),
+              const _TecmisSweepPicker(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ------------------------------------------------ STORAGE & UPDATES tab ----
+  Widget _storageUpdatesTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.storage_outlined, 'STORAGE AND DATA'),
+              const SizedBox(height: 10),
+              _storageRow('Messages stored', '$_messages'),
+              _storageRow('Pending uploads', '$_outbox'),
+              _storageRow('Database size', _fmtBytes(_dbBytes)),
+              _storageRow(
+                  'Last sync',
+                  _lastSync == null
+                      ? 'never'
+                      : DateFormat('dd MMM, HH:mm').format(_lastSync!)),
+              const Divider(color: AppColors.trackOff, height: 24),
+              SizedBox(
+                height: 40,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentDark,
+                    side: const BorderSide(color: AppColors.accent),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                  ),
+                  onPressed: () => _confirm(
+                    'Trim old messages?',
+                    'Messages older than 30 days will be removed from this '
+                    'device. Cloud copies stay; deletions still sync.',
+                    () async {
+                      await StorageService().trimOlderThan(30);
+                    },
+                  ),
+                  icon: const Icon(Icons.cleaning_services_outlined,
+                      size: 17),
+                  label: const Text('Free up space (30+ days)',
+                      style: TextStyle(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 40,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.alert,
+                    side: const BorderSide(color: AppColors.alert),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                  ),
+                  onPressed: () => _confirm(
+                    'Clear all messages?',
+                    'All messages will be removed from this device. '
+                    'They may return if the cloud still holds them.',
+                    () async {
+                      await StorageService().clearAllMessages();
+                    },
+                  ),
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                  label: const Text('Clear all messages',
+                      style: TextStyle(fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.system_update_alt, 'APP UPDATES'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Check for new versions',
+                          style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.heading),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Updates are delivered from the project\'s GitHub '
+                          'releases. The app downloads the APK and the '
+                          'system installer finishes the job.',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.muted,
+                              height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: AppColors.onAccent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18)),
+                      ),
+                      onPressed: () => showUpdateDialog(context),
+                      child: const Text('Check',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('HOW IT WORKS',
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      letterSpacing: 1.6,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.muted)),
+              SizedBox(height: 8),
+              Text(
+                '\u2022 Messages are stored locally (SQLite) and synced with '
+                'the cloud at your chosen interval, even when the app is '
+                'closed.\n'
+                '\u2022 Offline edits queue in the outbox and upload when '
+                'you are back online - the ticks show the state '
+                '(clock = queued, tick = uploading, double tick = synced).\n'
+                '\u2022 Message bodies understand Markdown: headings, lists, '
+                '**bold**, code, links, images and [video](url) players.\n'
+                '\u2022 TECMIS notices group under their original posted '
+                'date and carry the TECMIS logo.\n'
+                '\u2022 Deletes propagate to the cloud via tombstones, so '
+                'nothing deleted comes back.',
+                style: TextStyle(
+                    fontSize: 13, height: 1.55, color: AppColors.body),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ------------------------------------------------ CLOUD tab ----
+  Widget _cloudTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SoftCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeader(Icons.cloud_outlined, 'CLOUD SYNC'),
+              const SizedBox(height: 8),
+              const Text(
+                'Optional. Without a cloud the app works fully offline '
+                '(local mode). With a cloud, messages sync at your chosen '
+                'interval: local changes upload first, then remote changes '
+                'merge in (newest wins).',
+                style: TextStyle(
+                    fontSize: 13, color: AppColors.body, height: 1.45),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _apiUrl,
+                keyboardType: TextInputType.url,
+                decoration: _inputDec(
+                    'REST API URL (returns JSON list)',
+                    'https://example.com/api/items',
+                    Icons.api),
+              ),
+              const SizedBox(height: 14),
+              const Text('\u2014 or \u2014',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.muted)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _fbUrl,
+                keyboardType: TextInputType.url,
+                decoration: _inputDec(
+                    'Firebase Realtime DB URL (optional)',
+                    'https://your-db.firebaseio.com',
+                    Icons.local_fire_department_outlined),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _fbPath,
+                decoration: _inputDec(
+                    'Firebase path (default: items)', 'items',
+                    Icons.account_tree),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 52,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.onAccent,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+            ),
+            onPressed: _save,
+            icon: const Icon(Icons.cloud_sync),
+            label: const Text('Save and sync now'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(IconData icon, String title) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.accent),
+        const SizedBox(width: 8),
+        Text(title,
+            style: const TextStyle(
+                fontSize: 10.5,
+                letterSpacing: 1.6,
+                fontWeight: FontWeight.w600,
+                color: AppColors.muted)),
+      ],
     );
   }
 
@@ -1534,6 +1712,470 @@ class _WidgetSizePickerState extends State<_WidgetSizePicker> {
         option('m', 'M', '48dp ring'),
         const SizedBox(width: 8),
         option('l', 'L', '58dp ring'),
+        const SizedBox(width: 8),
+        option('off', 'Hidden', 'no ring'),
+      ],
+    );
+  }
+}
+
+/// Segmented picker for the sync interval (5/15/30/60 minutes).
+/// Re-registers the background task and refreshes the widget immediately.
+class _PollIntervalPicker extends StatefulWidget {
+  const _PollIntervalPicker();
+
+  @override
+  State<_PollIntervalPicker> createState() => _PollIntervalPickerState();
+}
+
+class _PollIntervalPickerState extends State<_PollIntervalPicker> {
+  int _mins = 15;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getPollMinutes();
+    if (mounted) {
+      setState(() {
+        _mins = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pick(int v) async {
+    if (_loading) return;
+    setState(() => _mins = v);
+    await StorageService().setPollMinutes(v);
+    await registerPeriodicPoll(); // re-register worker + effectiveInterval
+    await WidgetService.updateWidget();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    return Row(
+      children: [
+        for (final v in const [5, 15, 30, 60]) ...[
+          if (v != 5) const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _pick(v),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _mins == v ? AppColors.accent : AppColors.cardAlt,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: _mins == v
+                          ? AppColors.accent
+                          : AppColors.trackOff),
+                ),
+                child: Text(
+                  '$v min',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: _mins == v
+                          ? AppColors.onAccent
+                          : AppColors.heading),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Picker for how chatty the message bubbles are.
+class _BubbleDensityPicker extends StatefulWidget {
+  const _BubbleDensityPicker();
+
+  @override
+  State<_BubbleDensityPicker> createState() => _BubbleDensityPickerState();
+}
+
+class _BubbleDensityPickerState extends State<_BubbleDensityPicker> {
+  String _density = 'normal';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getBubbleDensity();
+    if (mounted) {
+      setState(() {
+        _density = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pick(String v) async {
+    if (_loading) return;
+    setState(() => _density = v);
+    await StorageService().setBubbleDensity(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    Widget option(String value, String label, String hint) {
+      final selected = _density == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _pick(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.accent : AppColors.cardAlt,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: selected
+                      ? AppColors.accent
+                      : AppColors.trackOff),
+            ),
+            child: Column(
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.heading)),
+                const SizedBox(height: 1),
+                Text(hint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: selected
+                            ? AppColors.onAccent
+                            : AppColors.muted)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        option('compact', 'Compact', 'title only'),
+        const SizedBox(width: 8),
+        option('normal', 'Normal', '3-line preview'),
+        const SizedBox(width: 8),
+        option('full', 'Detailed', '6-line preview'),
+      ],
+    );
+  }
+}
+
+/// 12h vs 24h clock in bubbles and dividers.
+class _TimeFormatPicker extends StatefulWidget {
+  const _TimeFormatPicker();
+
+  @override
+  State<_TimeFormatPicker> createState() => _TimeFormatPickerState();
+}
+
+class _TimeFormatPickerState extends State<_TimeFormatPicker> {
+  bool _use24 = true;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getUse24Hour();
+    if (mounted) {
+      setState(() {
+        _use24 = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pick(bool v) async {
+    if (_loading) return;
+    setState(() => _use24 = v);
+    await StorageService().setUse24Hour(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    Widget option(bool value, String label) {
+      final selected = _use24 == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _pick(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.accent : AppColors.cardAlt,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: selected
+                      ? AppColors.accent
+                      : AppColors.trackOff),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? AppColors.onAccent
+                        : AppColors.heading)),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('TIME FORMAT'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            option(true, '24-hour (15:40)'),
+            const SizedBox(width: 8),
+            option(false, '12-hour (3:40 PM)'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(String t) => Text(t,
+      style: const TextStyle(
+          fontSize: 10.5,
+          letterSpacing: 1.6,
+          fontWeight: FontWeight.w600,
+          color: AppColors.muted));
+}
+
+/// Which message types may post notifications.
+class _NotifyTypesPicker extends StatefulWidget {
+  const _NotifyTypesPicker();
+
+  @override
+  State<_NotifyTypesPicker> createState() => _NotifyTypesPickerState();
+}
+
+class _NotifyTypesPickerState extends State<_NotifyTypesPicker> {
+  static const _all = ['alert', 'warning', 'info', 'success', 'tecmis'];
+  Map<String, bool> _on = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getNotifyTypes();
+    if (mounted) {
+      setState(() {
+        _on = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggle(String t) async {
+    if (_loading) return;
+    setState(() => _on[t] = !( _on[t] ?? true));
+    await StorageService().setNotifyTypes(_on);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('NOTIFY ME ABOUT'),
+        const SizedBox(height: 4),
+        for (final t in _all)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            activeColor: AppColors.accent,
+            title: Row(
+              children: [
+                Icon(_typeIcon(t),
+                    size: 17,
+                    color: AppColors.typeColor(t)),
+                const SizedBox(width: 8),
+                Text(_typeLabel(t),
+                    style: const TextStyle(
+                        fontSize: 13.5, color: AppColors.body)),
+              ],
+            ),
+            value: _on[t] ?? true,
+            onChanged: (v) => _toggle(t),
+          ),
+      ],
+    );
+  }
+
+  Widget _sectionLabel(String t) => Text(t,
+      style: const TextStyle(
+          fontSize: 10.5,
+          letterSpacing: 1.6,
+          fontWeight: FontWeight.w600,
+          color: AppColors.muted));
+}
+
+String _typeLabel(String t) => switch (t) {
+      'alert' => 'Critical alerts (sound + vibration)',
+      'warning' => 'Warnings (sound)',
+      'info' => 'Info updates (silent)',
+      'success' => 'Success updates (silent)',
+      'tecmis' => 'TECMIS university notices (sound)',
+      _ => t,
+    };
+
+/// How often the TECMIS cloud-cleanup sweep runs (off / daily / weekly).
+class _TecmisSweepPicker extends StatefulWidget {
+  const _TecmisSweepPicker();
+
+  @override
+  State<_TecmisSweepPicker> createState() => _TecmisSweepPickerState();
+}
+
+class _TecmisSweepPickerState extends State<_TecmisSweepPicker> {
+  String _mode = 'daily';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final v = await StorageService().getTecmisSweepMode();
+    if (mounted) {
+      setState(() {
+        _mode = v;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pick(String v) async {
+    if (_loading) return;
+    setState(() => _mode = v);
+    await StorageService().setTecmisSweepMode(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+          height: 40,
+          child: Center(
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent))));
+    }
+    Widget option(String value, String label) {
+      final selected = _mode == value;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _pick(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.accent : AppColors.cardAlt,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: selected
+                      ? AppColors.accent
+                      : AppColors.trackOff),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? AppColors.onAccent
+                        : AppColors.heading)),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        option('off', 'Off'),
+        const SizedBox(width: 8),
+        option('daily', 'Daily'),
+        const SizedBox(width: 8),
+        option('weekly', 'Weekly'),
       ],
     );
   }

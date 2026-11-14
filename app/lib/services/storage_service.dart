@@ -346,11 +346,66 @@ class StorageService {
   Future<void> setFirebasePath(String v) async =>
       await setMeta('firebase_path', v.isEmpty ? 'items' : v);
 
-  /// Home-screen widget ring size: 's' | 'm' | 'l' (default 's').
+  /// Home-screen widget ring size: 's' | 'm' | 'l' | 'off' (default 's').
+  /// 'off' hides the countdown ring entirely (text-only widget).
   Future<String> getWidgetSize() async =>
       await getMeta('widget_size') ?? 's';
-  Future<void> setWidgetSize(String v) async => await setMeta(
-      'widget_size', v == 'm' || v == 'l' ? v : 's');
+  Future<void> setWidgetSize(String v) async =>
+      await setMeta('widget_size', ['m', 'l', 'off'].contains(v) ? v : 's');
+
+  /// Sync interval in minutes (5 | 15 | 30 | 60, default 15). Shorter
+  /// intervals notice database changes sooner but use a bit more battery.
+  static const validPollMinutes = [5, 15, 30, 60];
+  Future<int> getPollMinutes() async =>
+      int.tryParse(await getMeta('poll_minutes') ?? '') ??
+      15;
+  Future<void> setPollMinutes(int v) async =>
+      await setMeta('poll_minutes', validPollMinutes.contains(v) ? '$v' : '15');
+
+  /// The sync interval as a Duration, for timers and the widget countdown.
+  Future<Duration> getPollInterval() async =>
+      Duration(minutes: await getPollMinutes());
+
+  /// Message bubble density: 'compact' | 'normal' | 'full'.
+  Future<String> getBubbleDensity() async =>
+      await getMeta('bubble_density') ?? 'normal';
+  Future<void> setBubbleDensity(String v) async =>
+      await setMeta('bubble_density',
+          ['compact', 'normal', 'full'].contains(v) ? v : 'normal');
+
+  /// 24-hour clock in bubbles and dividers (default true).
+  Future<bool> getUse24Hour() async =>
+      (await getMeta('use_24h') ?? '1') == '1';
+  Future<void> setUse24Hour(bool v) async =>
+      await setMeta('use_24h', v ? '1' : '0');
+
+  /// Per-type notification switches. Stored as a comma list of ENABLED
+  /// types ('' = all off, missing key = all on).
+  static const notifyTypeKeys = [
+    'alert', 'warning', 'info', 'success', 'tecmis'
+  ];
+  Future<Map<String, bool>> getNotifyTypes() async {
+    final raw = await getMeta('notify_types');
+    if (raw == null) {
+      return {for (final k in notifyTypeKeys) k: true};
+    }
+    final enabled = raw.split(',').toSet();
+    return {
+      for (final k in notifyTypeKeys) k: enabled.contains(k),
+    };
+  }
+
+  Future<void> setNotifyTypes(Map<String, bool> on) async {
+    final enabled = notifyTypeKeys.where((k) => on[k] ?? true).toList();
+    await setMeta('notify_types', enabled.join(','));
+  }
+
+  /// TECMIS cloud-cleanup sweep cadence: 'off' | 'daily' | 'weekly'.
+  Future<String> getTecmisSweepMode() async =>
+      await getMeta('tecmis_sweep') ?? 'daily';
+  Future<void> setTecmisSweepMode(String v) async =>
+      await setMeta('tecmis_sweep',
+          ['off', 'daily', 'weekly'].contains(v) ? v : 'daily');
 
   Future<DateTime?> getLastPoll() async {
     final v = await getMeta('last_poll');

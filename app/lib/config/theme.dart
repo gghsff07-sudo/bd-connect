@@ -32,6 +32,7 @@ class AppColors {
   static const Color warning = Color(0xFFC98A3D); // warm amber
   static const Color info = Color(0xFF7A8FA6); // soft slate blue
   static const Color success = Color(0xFF7FA37A); // sage green
+  static const Color tecmis = Color(0xFF6B5B95); // muted plum (university notices)
 
   static Color typeColor(String type) {
     switch (type) {
@@ -41,6 +42,8 @@ class AppColors {
         return warning;
       case 'success':
         return success;
+      case 'tecmis':
+        return tecmis;
       default:
         return info;
     }

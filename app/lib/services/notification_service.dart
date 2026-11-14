@@ -41,6 +41,13 @@ class NotificationService {
     importance: Importance.low,
     playSound: false,
   );
+  static const _channelTecmis = AndroidNotificationChannel(
+    'db_tecmis',
+    'TECMIS notices',
+    description: 'University notices synced from TECMIS - sound',
+    importance: Importance.high,
+    playSound: true,
+  );
 
   static Future<void> init() async {
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -61,6 +68,7 @@ class NotificationService {
     await impl?.createNotificationChannel(_channelWarning);
     await impl?.createNotificationChannel(_channelInfo);
     await impl?.createNotificationChannel(_channelSuccess);
+    await impl?.createNotificationChannel(_channelTecmis);
   }
 
   /// Android 13+ requires the POST_NOTIFICATIONS runtime permission.
@@ -88,6 +96,8 @@ class NotificationService {
         return (_channelWarning, Priority.high);
       case 'success':
         return (_channelSuccess, Priority.low);
+      case 'tecmis':
+        return (_channelTecmis, Priority.high);
       default:
         return (_channelInfo, Priority.low);
     }

@@ -118,7 +118,13 @@ class MonitorItem {
     ]);
     var type = pick(['type', 'level', 'severity', 'priority', 'kind'])
         .toLowerCase();
-    if (type != 'alert' && type != 'warning' && type != 'success') type = 'info';
+    // 'tecmis' is a first-class type (university notices synced from the
+    // TECMIS scraper) - it keeps its own colour, icon and notification
+    // channel instead of collapsing into 'info'.
+    if (type != 'alert' && type != 'warning' && type != 'success' &&
+        type != 'tecmis') {
+      type = 'info';
+    }
 
     DateTime? dt;
     for (final k in [
@@ -132,6 +138,14 @@ class MonitorItem {
                   v > 9999999999 ? v.toInt() : (v.toInt() * 1000))
               : null);
       if (dt != null) break;
+    }
+
+    // TECMIS notices: the cloud's createdAt/updatedAt are the *sync* time
+    // (when the scraper pushed them), not when the university posted them.
+    // Grouping must follow the original posted date, so prefer the date
+    // embedded in the notice itself.
+    if (type == 'tecmis' || idRaw.startsWith('tecmis-')) {
+      dt = parsePostedAt(body: body, id: idRaw) ?? dt;
     }
 
     return MonitorItem(
@@ -162,6 +176,43 @@ class MonitorItem {
         RegExp(r'^#{1,6} ', multiLine: true).hasMatch(b);
   }
 
+  /// The original TECMIS posted date for this notice, when derivable.
+  ///
+  /// Sources, in order of trust:
+  ///  1. `**Posted:** YYYY-MM-DD HH:MM` inside the markdown body (written
+  ///     by the scraper for both AI-enhanced and plain bodies);
+  ///  2. the id's upload-stamp prefix `tecmis-file-YYMMDDHHMMSS-…`
+  ///     (file notices link the document directly).
+  /// Returns null when neither is present.
+  DateTime? get postedAt {
+    if (type != 'tecmis' && !id.startsWith('tecmis-')) return null;
+    return parsePostedAt(body: body, id: id);
+  }
+
   @override
   String toString() => jsonEncode(toJson());
+}
+
+/// Extract the original posted timestamp of a TECMIS notice.
+DateTime? parsePostedAt({required String body, required String id}) {
+  // 1) "**Posted:** 2026-11-11 10:51" (or Posted: without bold, on its line).
+  final m = RegExp(
+          r'Posted:\*{0,2}\s*(\d{4})-(\d{2})-(\d{2})[ /](\d{2}):(\d{2})')
+      .firstMatch(body);
+  if (m != null) {
+    final d = DateTime.tryParse(
+        '${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:00');
+    if (d != null) return d;
+  }
+  // 2) tecmis-file-261111105101-…  →  2026-11-11 10:51:01
+  final f = RegExp(r'tecmis-file-(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})')
+      .firstMatch(id);
+  if (f != null) {
+    final yy = int.tryParse(f[1]!)!;
+    final year = 2000 + yy; // TECMIS upload stamps are post-2000
+    final d = DateTime.tryParse(
+        '$year-${f[2]}-${f[3]} ${f[4]}:${f[5]}:${f[6]}');
+    if (d != null) return d;
+  }
+  return null;
 }
