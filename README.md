@@ -6,22 +6,49 @@ WhatsApp-style cloud sync, Markdown message bodies, a real-time home-screen
 widget, and styled notifications with a full permission flow — all in the warm
 **Soft Day** theme (cream `#F0EAE2`, terracotta `#C0684F`, charcoal `#2E2A26`).
 
-**Latest release: v2.7.0 (versionCode 9)** — install
-`db-monitor-v2.7.0.apk` from the [v2.7.0 release](../../releases/tag/v2.7.0)
+**Latest release: v2.8.0 (versionCode 10)** — install
+`db-monitor-v2.8.0.apk` from the [v2.8.0 release](../../releases/tag/v2.8.0)
 (Android 5.0+). The APK is built and attached automatically by GitHub Actions.
 
 ## Install
 
-1. Download `db-monitor-v2.7.0.apk` from the
-   [v2.7.0 release](../../releases/tag/v2.7.0) and copy it to your Android
+1. Download `db-monitor-v2.8.0.apk` from the
+   [v2.8.0 release](../../releases/tag/v2.8.0) and copy it to your Android
    phone (Android 5.0+).
 2. Tap it and allow "install from unknown sources" when asked. Installing over
-   v2.4/v2.3/v2.2/v2.1 works directly (same signature, higher versionCode 9).
+   v2.7/v2.6/v2.5/v2.4/v2.3 works directly (same signature, higher
+   versionCode 10).
 3. On first launch the app asks for **notification permission** — allow it so
    database alerts can reach you (Android 13+).
 4. From v2.4 onward you never need to sideload again: **Settings → App
    updates → Check** looks up the latest GitHub release, downloads the APK
    and the system installer finishes the job.
+
+## What's new in v2.8
+
+- **The widget actually works now (root cause fixed)** — every push of
+  widget data died on a plugin limitation: `home_widget` 0.6.0 cannot store
+  epoch-millisecond values (the platform channel turns them into Kotlin
+  `Long`, which its Android `saveWidgetData` rejects), so the first
+  epoch-ms save threw and aborted the whole update — the widget never
+  received new data and only refreshed via its own in-app ticker. All
+  numeric values are now pushed as strings (parsed safely on the Kotlin
+  side, tolerating old values left by v2.7), each key is saved
+  individually so one bad value can never abort the rest, and the update
+  broadcast really goes out after every change.
+- **Widget survives the app being killed** — besides the 1-second ticker
+  (app running) and the system's 30-minute `updatePeriodMillis`, the
+  provider now schedules its own AlarmManager fallback (inexact,
+  allow-while-idle, 60s cadence, re-arming) so the countdown, ring and
+  "updated Xs ago" label keep ticking without the app process.
+- **Widget shows the right notice** — the "latest" line is now the newest
+  *incomplete* notice by original posted date (not by sync arrival), with
+  the TECMIS brand label for university notices (`TECMIS · title`).
+- **Archive reads newest-first** — the archive screen rendered
+  oldest-first because it reversed the already-newest-first query result;
+  day dividers (TODAY → YESTERDAY → older) now follow the same descending
+  order, newest notice first within each day. Unit tests pin the shared
+  ordering helper used by the archive and the widget.
 
 ## What's new in v2.7
 
@@ -160,7 +187,7 @@ The workflow can also be run manually from the **Actions** tab.
 ## Repository layout
 
 ```
-app/        Flutter project (v2.7.0) — lib/, android/, assets/, test/
+app/        Flutter project (v2.8.0) — lib/, android/, assets/, test/
 scripts/    make_logo.py (logo/icon generator), setup_keystore.py
 signing/    release keystore + key.properties + instructions  ⚠ see SIGNING.md
 ```
@@ -206,15 +233,17 @@ device, sync waits until you configure one.
 ## Technical
 
 - Flutter 3.24.5, Dart 3.5, minSdk 21 (Android 5.0+), targetSdk 34, package
-  `com.dbmonitor.db_monitor`, versionName 2.7.0, versionCode 9, signed with
+  `com.dbmonitor.db_monitor`, versionName 2.8.0, versionCode 10, signed with
   v1+v2 schemes (minSdk 21 keeps v1 so older devices accept the APK)
 - Storage: `sqflite` SQLite (messages / outbox / tombs / meta)
 - Sync: `http` REST client + WorkManager 15-min periodic task + foreground
   timer + resume-triggered sync; exponential backoff via attempt counters
 - Markdown: `flutter_markdown` + custom image builder + `video_player`
-- Widget: `home_widget` + native `SoftDayWidgetProvider` (Kotlin) with a
-  1-second Handler tick for real-time updates; three size layouts
-  (S/M/L, selectable in Settings)
+- Widget: `home_widget` + native `SoftDayWidgetProvider` (Kotlin): 1-second
+  Handler tick while the app lives, AlarmManager fallback (60s, re-arming)
+  and `updatePeriodMillis` (30 min) when it does not; numeric prefs cross
+  the plugin as strings (home_widget 0.6.0 cannot persist Kotlin Long);
+  three size layouts (S/M/L, selectable in Settings) + no-ring variant
 - Updates: GitHub releases API + `http` streaming download + FileProvider
   install intent (`db_monitor/update` method channel)
 - Notifications: `flutter_local_notifications`, 4 per-type channels,
@@ -226,7 +255,8 @@ device, sync waits until you configure one.
 | --- | --- |
 | v2.5.0 | TECMIS deletion endpoints, authenticated writes, percent-encoded ids, install fix (v2.3 toolchain) |
 | v2.6.0 | Original-date grouping, TECMIS type + logo, variable ring sizes with hide option, widget fixes, full-width cards, grouped Settings tabs |
-| v2.7.0 | Contiguous day grouping, hideable countdown card, notice banner removed, WhatsApp-style archive for completed notices (current) |
+| v2.8.0 | Widget root-cause fix (home_widget Long limitation → string payloads), AlarmManager keep-alive, latest notice by posted date with TECMIS label, archive newest-first (current) |
+| v2.7.0 | Contiguous day grouping, hideable countdown card, notice banner removed, WhatsApp-style archive for completed notices |
 | v2.4.0 | Compact side countdown (S/M/L sizes), in-app GitHub updates, full-width message detail |
 | v2.3.0 | Real-time widget, Markdown bodies, SQLite storage + cloud sync |
 | v2.2 | Sync hardening, storage screen |

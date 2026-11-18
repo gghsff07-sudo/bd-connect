@@ -600,8 +600,12 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Newest first (descending effective posted date) - loadItems already
+    // returns that order for byEffectiveDate: true, so the archive reads
+    // top-down like an inbox: TODAY at the top, older days below, newest
+    // notice first within each day. (The chat list is the only screen that
+    // reads bottom-up like a messenger; the archive is a browsing list.)
     final items = _filtered;
-    final oldestFirst = items.reversed.toList();
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -672,11 +676,11 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.only(bottom: 24, top: 4),
-                  itemCount: oldestFirst.length,
+                  itemCount: items.length,
                   itemBuilder: (context, i) {
-                    final item = oldestFirst[i];
+                    final item = items[i];
                     final showDay = i == 0 ||
-                        _dayKey(oldestFirst[i - 1]) != _dayKey(item);
+                        _dayKey(items[i - 1]) != _dayKey(item);
                     return Column(
                       children: [
                         if (showDay) _archiveDayDivider(_dayKey(item)),

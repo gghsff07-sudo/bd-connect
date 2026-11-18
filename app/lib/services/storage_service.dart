@@ -110,8 +110,7 @@ class StorageService {
           limit: limit);
       final items = rows.map(_rowToItem).toList();
       if (byEffectiveDate) {
-        items.sort((a, b) => (b.postedAt ?? b.createdAt)
-            .compareTo(a.postedAt ?? a.createdAt));
+        return sortByEffectiveDateDesc(items);
       }
       return items;
     } catch (_) {

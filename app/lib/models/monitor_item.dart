@@ -190,8 +190,24 @@ class MonitorItem {
     return parsePostedAt(body: body, id: id);
   }
 
+  /// The date this item *belongs* to for grouping and ordering: the
+  /// original posted date for TECMIS notices, else the sync/creation
+  /// time. Shared by the chat list, the archive and the widget's
+  /// "latest notice" pick so all three agree on what "newest" means.
+  DateTime get effectiveDate => postedAt ?? createdAt;
+
   @override
   String toString() => jsonEncode(toJson());
+}
+
+/// Sort [items] newest-first by effective date (descending), then by time
+/// within a day. This is the order the archive screen renders (newest at
+/// the top, day dividers descending) and the order the widget uses to
+/// pick the latest incomplete notice.
+List<MonitorItem> sortByEffectiveDateDesc(List<MonitorItem> items) {
+  final list = List<MonitorItem>.from(items);
+  list.sort((a, b) => b.effectiveDate.compareTo(a.effectiveDate));
+  return list;
 }
 
 /// Extract the original posted timestamp of a TECMIS notice.
